@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  gpt-sovits:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    image: gpt-sovits:v4
+    container_name: gpt-sovits-cli
+    
+    # GPU設定 & 環境変数
+    runtime: nvidia
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - IS_HALF=True
+      - PYTHONUNBUFFERED=1
+      - TZ=Asia/Tokyo
+    
+    # ボリューム設定
+    volumes:
+      - ./input:/app/input
+      - ./output:/app/output
+      - ./logs:/app/logs
+      - ./scripts:/app/scripts:ro
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    
+    # ネットワーク設定（CLIのみなのでポート公開は不要）
+    network_mode: bridge
+    
+    # セキュリティ設定
+    security_opt:
+      - no-new-privileges:true
+    
+    # リソース制限
+    mem_limit: 8g
+    memswap_limit: 8g
+    shm_size: 2g
+    
+    # ヘルスチェック
+    healthcheck:
+      test: ["CMD", "python", "-c", "import torch; print(torch.cuda.is_available())"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # 再起動ポリシー
+    restart: unless-stopped
+    
+    # ログ設定
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # 実行時設定
+    stdin_open: true
+    tty: true
+    
+    # 実行コマンド（デフォルトはDockerfileのCMD）
+    # command: python -u /app/scripts/test_voice_clone.py
+
+# ネットワーク設定
+networks:
+  default:
+    driver: bridge
+
+# ボリューム設定（永続化が必要な場合）
+volumes:
+  model_cache:
+    driver: local

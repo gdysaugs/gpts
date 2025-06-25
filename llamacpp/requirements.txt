@@ -1,0 +1,17 @@
+# Core dependencies (llama-cpp-python is built in Dockerfile)
+pyyaml>=6.0
+colorama>=0.4.6
+rich>=13.0.0
+
+# FastAPI and web server dependencies
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+
+# Optional dependencies for enhanced functionality
+numpy>=1.21.0
+typing-extensions>=4.0.0
+
+# Development and testing
+pytest>=7.0.0
+httpx>=0.25.0  # For API testing

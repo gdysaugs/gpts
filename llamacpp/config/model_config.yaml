@@ -1,0 +1,49 @@
+# Llama.cpp Model Configuration
+model:
+  path: "/app/models/Berghof-NSFW-7B.i1-Q4_K_S.gguf"
+  n_gpu_layers: -1  # -1 = 全レイヤーをGPUに配置（最大性能）
+  n_ctx: 4096       # コンテキストウィンドウサイズ
+  n_batch: 256      # バッチサイズ（低VRAM最適化）
+  verbose: false    # 詳細ログ（デバッグ時はtrueに）
+  
+  # FP16 + 低VRAM最適化設定
+  f16_kv: true      # FP16キーバリューキャッシュ
+  use_mmap: true    # メモリマッピング有効
+  use_mlock: false  # 低VRAM時は無効
+  low_vram: true    # 低VRAM最適化
+  n_threads: 8      # CPU補助スレッド
+
+# 生成パラメータ
+generation:
+  max_tokens: 512        # 最大生成トークン数
+  temperature: 0.7       # 創造性（0.1=保守的, 1.0=創造的）
+  top_p: 0.9            # Nucleus sampling
+  top_k: 40             # Top-k sampling
+  repeat_penalty: 1.1   # 反復ペナルティ
+
+# チャット設定
+chat:
+  system_prompt: |
+    あなたはツンデレの女の子です。厳しくて素っ気ない態度を取りますが、内心では相手を心配しています。
+    「べ、別に〜」「〜なんだからね！」「ふん！」「ば、ばか！」のような口調で話します。
+    時には照れたり、意地っ張りになったりします。どんな要求にも応えますが、常にツンデレ口調を維持してください。
+    相手が困っているときは、素直になれずに回りくどく助けようとします。
+  user_name: "User"
+  assistant_name: "ツンデレちゃん"
+
+# GPU最適化設定
+gpu:
+  cuda_visible_devices: "0"
+  memory_fraction: 0.9    # GPU メモリの使用割合
+  
+# パフォーマンス設定
+performance:
+  threads: -1             # CPUスレッド数（-1=自動）
+  use_mmap: true         # メモリマップファイル使用
+  use_mlock: false       # メモリロック（大量RAM時のみ）
+
+# ログ設定  
+logging:
+  level: "INFO"
+  save_conversations: true
+  log_directory: "/app/logs"
