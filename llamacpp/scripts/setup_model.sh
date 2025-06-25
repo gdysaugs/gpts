@@ -34,16 +34,41 @@ check_directories() {
     print_success "All directories present"
 }
 
-# モデルファイル確認
+# モデルファイル確認とダウンロード
 check_model_file() {
     print_info "Checking model file..."
     
     MODEL_FILE="/app/models/Berghof-NSFW-7B.i1-Q4_K_S.gguf"
     
     if [ ! -f "$MODEL_FILE" ]; then
-        print_error "Model file not found: $MODEL_FILE"
-        print_warning "Please ensure the model file is mounted in the container"
-        exit 1
+        print_warning "Model file not found: $MODEL_FILE"
+        print_info "Attempting to download model..."
+        
+        # モデルダウンロード
+        if command -v wget &> /dev/null; then
+            print_info "Downloading Berghof-NSFW-7B model (this may take a while)..."
+            wget -O "$MODEL_FILE" "https://huggingface.co/TheBloke/Berghof-NSFW-7B-GGUF/resolve/main/berghof-nsfw-7b.i1-Q4_K_S.gguf" || {
+                print_error "Download failed with wget"
+                print_info "Please download manually from:"
+                print_info "https://huggingface.co/TheBloke/Berghof-NSFW-7B-GGUF"
+                exit 1
+            }
+        elif command -v curl &> /dev/null; then
+            print_info "Downloading Berghof-NSFW-7B model (this may take a while)..."
+            curl -L -o "$MODEL_FILE" "https://huggingface.co/TheBloke/Berghof-NSFW-7B-GGUF/resolve/main/berghof-nsfw-7b.i1-Q4_K_S.gguf" || {
+                print_error "Download failed with curl"
+                print_info "Please download manually from:"
+                print_info "https://huggingface.co/TheBloke/Berghof-NSFW-7B-GGUF"
+                exit 1
+            }
+        else
+            print_error "Neither wget nor curl available for download"
+            print_info "Please download manually from:"
+            print_info "https://huggingface.co/TheBloke/Berghof-NSFW-7B-GGUF"
+            exit 1
+        fi
+        
+        print_success "Model downloaded successfully"
     fi
     
     # ファイルサイズチェック
