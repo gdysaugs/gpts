@@ -45,26 +45,28 @@ check_model_file() {
         print_info "Attempting to download model..."
         
         # モデルダウンロード
+        DOWNLOAD_URL="https://huggingface.co/mradermacher/Berghof-NSFW-7B-i1-GGUF/resolve/main/Berghof-NSFW-7B.i1-Q4_K_S.gguf?download=true"
+        
         if command -v wget &> /dev/null; then
             print_info "Downloading Berghof-NSFW-7B model (this may take a while)..."
-            wget -O "$MODEL_FILE" "https://huggingface.co/mradermacher/Berghof-NSFW-7B-i1-GGUF/resolve/main/Berghof-NSFW-7B.i1-Q4_K_S.gguf" || {
+            wget -O "$MODEL_FILE" "$DOWNLOAD_URL" || {
                 print_error "Download failed with wget"
                 print_info "Please download manually from:"
-                print_info "https://huggingface.co/mradermacher/Berghof-NSFW-7B-i1-GGUF"
+                print_info "https://huggingface.co/mradermacher/Berghof-NSFW-7B-i1-GGUF?not-for-all-audiences=true&show_file_info=Berghof-NSFW-7B.i1-Q4_K_S.gguf"
                 exit 1
             }
         elif command -v curl &> /dev/null; then
             print_info "Downloading Berghof-NSFW-7B model (this may take a while)..."
-            curl -L -o "$MODEL_FILE" "https://huggingface.co/mradermacher/Berghof-NSFW-7B-i1-GGUF/resolve/main/Berghof-NSFW-7B.i1-Q4_K_S.gguf" || {
+            curl -L -o "$MODEL_FILE" "$DOWNLOAD_URL" || {
                 print_error "Download failed with curl"
                 print_info "Please download manually from:"
-                print_info "https://huggingface.co/mradermacher/Berghof-NSFW-7B-i1-GGUF"
+                print_info "https://huggingface.co/mradermacher/Berghof-NSFW-7B-i1-GGUF?not-for-all-audiences=true&show_file_info=Berghof-NSFW-7B.i1-Q4_K_S.gguf"
                 exit 1
             }
         else
             print_error "Neither wget nor curl available for download"
             print_info "Please download manually from:"
-            print_info "https://huggingface.co/mradermacher/Berghof-NSFW-7B-i1-GGUF"
+            print_info "https://huggingface.co/mradermacher/Berghof-NSFW-7B-i1-GGUF?not-for-all-audiences=true&show_file_info=Berghof-NSFW-7B.i1-Q4_K_S.gguf"
             exit 1
         fi
         
