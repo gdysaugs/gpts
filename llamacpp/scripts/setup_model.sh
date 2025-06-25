@@ -47,24 +47,24 @@ check_model_file() {
         # モデルダウンロード
         if command -v wget &> /dev/null; then
             print_info "Downloading Berghof-NSFW-7B model (this may take a while)..."
-            wget -O "$MODEL_FILE" "https://huggingface.co/TheBloke/Berghof-NSFW-7B-GGUF/resolve/main/berghof-nsfw-7b.i1-Q4_K_S.gguf" || {
+            wget -O "$MODEL_FILE" "https://huggingface.co/mradermacher/Berghof-NSFW-7B-i1-GGUF/resolve/main/Berghof-NSFW-7B.i1-Q4_K_S.gguf" || {
                 print_error "Download failed with wget"
                 print_info "Please download manually from:"
-                print_info "https://huggingface.co/TheBloke/Berghof-NSFW-7B-GGUF"
+                print_info "https://huggingface.co/mradermacher/Berghof-NSFW-7B-i1-GGUF"
                 exit 1
             }
         elif command -v curl &> /dev/null; then
             print_info "Downloading Berghof-NSFW-7B model (this may take a while)..."
-            curl -L -o "$MODEL_FILE" "https://huggingface.co/TheBloke/Berghof-NSFW-7B-GGUF/resolve/main/berghof-nsfw-7b.i1-Q4_K_S.gguf" || {
+            curl -L -o "$MODEL_FILE" "https://huggingface.co/mradermacher/Berghof-NSFW-7B-i1-GGUF/resolve/main/Berghof-NSFW-7B.i1-Q4_K_S.gguf" || {
                 print_error "Download failed with curl"
                 print_info "Please download manually from:"
-                print_info "https://huggingface.co/TheBloke/Berghof-NSFW-7B-GGUF"
+                print_info "https://huggingface.co/mradermacher/Berghof-NSFW-7B-i1-GGUF"
                 exit 1
             }
         else
             print_error "Neither wget nor curl available for download"
             print_info "Please download manually from:"
-            print_info "https://huggingface.co/TheBloke/Berghof-NSFW-7B-GGUF"
+            print_info "https://huggingface.co/mradermacher/Berghof-NSFW-7B-i1-GGUF"
             exit 1
         fi
         

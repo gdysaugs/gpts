@@ -23,6 +23,14 @@ wget -O s2G2333k.pth "https://huggingface.co/AkitoP/GPT-SoVITS-JA-H/resolve/main
 echo "SoVITSモデルをダウンロード中..."
 wget -O s2D2333k.pth "https://huggingface.co/AkitoP/GPT-SoVITS-JA-H/resolve/main/s2D2333k.pth"
 
+# 日本語特化感情モデル (hscene-e17.ckpt)
+echo "日本語特化感情モデル(hscene-e17.ckpt)をダウンロード中..."
+wget -O hscene-e17.ckpt "https://huggingface.co/AkitoP/GPT-SoVITS-JA-H/resolve/main/hscene-e17.ckpt" || {
+    echo "警告: hscene-e17.ckptのダウンロードに失敗しました"
+    echo "手動で以下からダウンロードしてください："
+    echo "https://huggingface.co/AkitoP/GPT-SoVITS-JA-H"
+}
+
 # 設定ファイルなどもダウンロード
 echo "設定ファイルをダウンロード中..."
 wget -O config.json "https://huggingface.co/AkitoP/GPT-SoVITS-JA-H/resolve/main/config.json" || echo "config.jsonが見つかりません"

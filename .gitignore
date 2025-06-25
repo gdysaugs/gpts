@@ -10,9 +10,13 @@ models/
 logs/
 *.log
 
-# Audio files
-*.wav
-*.mp3
+# Audio files (exclude generated outputs, keep reference inputs)
+output/*.wav
+output/*.mp3
+fastapi_*.wav
+test_*.wav
+!input/*.wav
+!input/*.mp3
 
 # Temporary files
 *.tmp
