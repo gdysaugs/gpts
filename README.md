@@ -17,11 +17,13 @@ chmod +x setup.sh
 ```
 
 このスクリプトが以下を自動実行します：
+- 環境自動検出（WSL2 vs ネイティブLinux）
 - 必要なディレクトリ構造作成
 - GPT-SoVITSモデルダウンロード
 - LlamaCPPモデルダウンロード
 - Docker環境確認
 - 実行権限設定
+- 環境別コマンド例の生成（docker_commands.txt）
 
 ### 3. Dockerイメージビルド
 
@@ -161,8 +163,8 @@ docker run --gpus all --rm -it \
 ## ⚙️ システム要件
 
 ### 必須環境
-- **OS**: WSL2 Ubuntu 22.04
-- **GPU**: NVIDIA RTX 3050以上 + CUDA 12.1対応
+- **OS**: Linux (Ubuntu 22.04推奨、WSL2対応)
+- **GPU**: NVIDIA GPU + CUDA 12.1以上対応
 - **VRAM**: 4GB以上（8GB推奨）
 - **RAM**: 16GB以上推奨
 - **Storage**: 50GB以上の空き容量

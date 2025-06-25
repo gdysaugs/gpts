@@ -13,8 +13,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# 作業ディレクトリ
-WORK_DIR="/home/adama/.claude/projects/Gptsovits"
+# 作業ディレクトリ（スクリプトの実行場所から相対パスで決定）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORK_DIR="$(dirname "$SCRIPT_DIR")"
 MODEL_DIR="${WORK_DIR}/models/v4"
 
 # Git LFSの確認

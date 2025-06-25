@@ -117,6 +117,43 @@ else
     echo "  sudo usermod -aG docker \$USER"
 fi
 
+# Environment detection
+print_header "🔍 Environment detection..."
+
+# Check if running on WSL2
+if grep -qi microsoft /proc/version 2>/dev/null; then
+    WSL_ENV=true
+    print_status "WSL2 environment detected"
+    WSL_VOLUME="-v /usr/lib/wsl:/usr/lib/wsl"
+    WSL_ENV_VAR="-e LD_LIBRARY_PATH=/usr/lib/wsl/lib"
+else
+    WSL_ENV=false
+    print_status "Native Linux environment detected"
+    WSL_VOLUME=""
+    WSL_ENV_VAR=""
+fi
+
+# Create environment-specific command examples
+create_env_commands() {
+    if [ "$WSL_ENV" = true ]; then
+        echo "# WSL2 Environment Commands" > docker_commands.txt
+        echo "export WSL_VOLUME=\"-v /usr/lib/wsl:/usr/lib/wsl\"" >> docker_commands.txt
+        echo "export WSL_ENV_VAR=\"-e LD_LIBRARY_PATH=/usr/lib/wsl/lib\"" >> docker_commands.txt
+    else
+        echo "# Native Linux Environment Commands" > docker_commands.txt
+        echo "export WSL_VOLUME=\"\"" >> docker_commands.txt
+        echo "export WSL_ENV_VAR=\"\"" >> docker_commands.txt
+    fi
+    
+    echo "" >> docker_commands.txt
+    echo "# GPU Test Command:" >> docker_commands.txt
+    echo "docker run --gpus all --rm \$WSL_VOLUME \$WSL_ENV_VAR nvidia/cuda:12.1-runtime-ubuntu20.04 nvidia-smi" >> docker_commands.txt
+    
+    print_status "Environment-specific commands saved to docker_commands.txt"
+}
+
+create_env_commands
+
 # Final status
 print_header "✅ Setup complete!"
 echo ""
@@ -128,7 +165,11 @@ echo "2. LlamaCPP: Build Docker image"
 echo "   cd llamacpp && DOCKER_BUILDKIT=1 docker build -t llama-cpp-python:cuda ."
 echo ""
 echo "3. Test GPU access:"
-echo "   docker run --gpus all --rm nvidia/cuda:12.1-runtime-ubuntu20.04 nvidia-smi"
+if [ "$WSL_ENV" = true ]; then
+    echo "   docker run --gpus all --rm -v /usr/lib/wsl:/usr/lib/wsl -e LD_LIBRARY_PATH=/usr/lib/wsl/lib nvidia/cuda:12.1-runtime-ubuntu20.04 nvidia-smi"
+else
+    echo "   docker run --gpus all --rm nvidia/cuda:12.1-runtime-ubuntu20.04 nvidia-smi"
+fi
 echo ""
 
-print_status "Ready to use! Check README.md for usage instructions."
+print_status "Ready to use! Check README.md and docker_commands.txt for usage instructions."
