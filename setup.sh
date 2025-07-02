@@ -62,9 +62,12 @@ else
     print_warning "GPT-SoVITS download script not found, manual setup required"
     print_status "Please download models manually:"
     echo "  - Standard v2 models to models/v4/GPT-SoVITS/gsv-v2final-pretrained/"
-    echo "  - Japanese model hscene-e17.ckpt to models/v4/GPT-SoVITS/gpt-sovits-ja-h/"
+    echo "  - Japanese model hscene-e17.ckpt (148MB) to models/v4/GPT-SoVITS/gpt-sovits-ja-h/"
     echo "  - Chinese HuBERT to models/v4/GPT-SoVITS/chinese-hubert-base/"
     echo "  - Chinese RoBERTa to models/v4/GPT-SoVITS/chinese-roberta-wwm-ext-large/"
+    echo ""
+    echo "🚨 CRITICAL: For Japanese voice cloning, hscene-e17.ckpt is REQUIRED!"
+    echo "Copy from Windows: cp /mnt/c/Users/adama/Downloads/hscene-e17.ckpt models/v4/GPT-SoVITS/gpt-sovits-ja-h/"
 fi
 
 cd ..
@@ -82,8 +85,14 @@ if [ -f "scripts/setup_model.sh" ]; then
 else
     print_warning "LlamaCPP setup script not found, manual setup required"
     print_status "Please download the model manually:"
-    echo "  - Download Berghof-NSFW-7B.i1-Q4_K_S.gguf to models/"
+    echo "  - Download Berghof-NSFW-7B.i1-Q4_K_S.gguf (3.9GB) to models/"
     echo "  - Or any other GGUF format model you prefer"
+    echo ""
+    echo "🚨 CRITICAL: LlamaCPP requires a GGUF model file!"
+    echo "Download methods:"
+    echo "  1. Hugging Face CLI: huggingface-cli download TheBloke/Berghof-NSFW-7B-GGUF Berghof-NSFW-7B.i1-Q4_K_S.gguf --local-dir models/ --local-dir-use-symlinks False"
+    echo "  2. Copy from Windows: cp /mnt/c/Users/adama/Downloads/Berghof-NSFW-7B.i1-Q4_K_S.gguf models/"
+    echo "  3. See MODEL_DOWNLOAD_GUIDE.md for detailed instructions"
 fi
 
 cd ..
@@ -173,3 +182,18 @@ fi
 echo ""
 
 print_status "Ready to use! Check README.md and docker_commands.txt for usage instructions."
+
+echo ""
+print_header "🚨 IMPORTANT: Manual Model Downloads Required!"
+echo ""
+print_warning "The following files must be downloaded manually:"
+echo "1. GPT-SoVITS: hscene-e17.ckpt (148MB)"
+echo "2. LlamaCPP: Berghof-NSFW-7B.i1-Q4_K_S.gguf (3.9GB)"
+echo ""
+print_status "📖 See MODEL_DOWNLOAD_GUIDE.md for complete instructions!"
+echo "📖 All download methods and verification steps are documented there."
+echo ""
+print_status "After downloading these files, run:"
+echo "  cd Gptsovits && DOCKER_BUILDKIT=1 docker build -t gpt-sovits:v4 ."
+echo "  cd ../llamacpp && DOCKER_BUILDKIT=1 docker build -t llama-cpp-python:cuda ."
+echo "  cd ../wav2lip && DOCKER_BUILDKIT=1 docker build -f Dockerfile.optimized -t wav2lip-optimized:v1 ."

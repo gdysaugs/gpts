@@ -1,189 +1,167 @@
 #!/bin/bash
-# Model Setup Script for Llama.cpp Python
+# LlamaCPP Model Setup Script
+# ツンデレLLMモデルセットアップ
 
 set -e
 
-echo "🔧 Llama.cpp Model Setup Script"
-echo "================================"
+echo "🤖 ツンデレLlamaCPPモデルセットアップ開始！"
+echo "ふん！必要なモデルをダウンロードしてあげるわよ..."
 
-# 色付きメッセージ用関数
-print_success() { echo -e "\033[32m✅ $1\033[0m"; }
-print_warning() { echo -e "\033[33m⚠️ $1\033[0m"; }
-print_error() { echo -e "\033[31m❌ $1\033[0m"; }
-print_info() { echo -e "\033[34m🔍 $1\033[0m"; }
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
-# ディレクトリ存在確認
-check_directories() {
-    print_info "Checking directories..."
-    
-    if [ ! -d "/app/models" ]; then
-        print_error "Models directory not found!"
-        exit 1
-    fi
-    
-    if [ ! -d "/app/config" ]; then
-        print_error "Config directory not found!"
-        exit 1
-    fi
-    
-    if [ ! -d "/app/logs" ]; then
-        mkdir -p /app/logs
-        print_success "Created logs directory"
-    fi
-    
-    print_success "All directories present"
+print_status() {
+    echo -e "${GREEN}[INFO]${NC} $1"
 }
 
-# モデルファイル確認とダウンロード
-check_model_file() {
-    print_info "Checking model file..."
-    
-    MODEL_FILE="/app/models/Berghof-NSFW-7B.i1-Q4_K_S.gguf"
-    
-    if [ ! -f "$MODEL_FILE" ]; then
-        print_warning "Model file not found: $MODEL_FILE"
-        print_info "Attempting to download model..."
-        
-        # モデルダウンロード
-        DOWNLOAD_URL="https://huggingface.co/mradermacher/Berghof-NSFW-7B-i1-GGUF/resolve/main/Berghof-NSFW-7B.i1-Q4_K_S.gguf?download=true"
-        
-        if command -v wget &> /dev/null; then
-            print_info "Downloading Berghof-NSFW-7B model (this may take a while)..."
-            wget -O "$MODEL_FILE" "$DOWNLOAD_URL" || {
-                print_error "Download failed with wget"
-                print_info "Please download manually from:"
-                print_info "https://huggingface.co/mradermacher/Berghof-NSFW-7B-i1-GGUF?not-for-all-audiences=true&show_file_info=Berghof-NSFW-7B.i1-Q4_K_S.gguf"
-                exit 1
-            }
-        elif command -v curl &> /dev/null; then
-            print_info "Downloading Berghof-NSFW-7B model (this may take a while)..."
-            curl -L -o "$MODEL_FILE" "$DOWNLOAD_URL" || {
-                print_error "Download failed with curl"
-                print_info "Please download manually from:"
-                print_info "https://huggingface.co/mradermacher/Berghof-NSFW-7B-i1-GGUF?not-for-all-audiences=true&show_file_info=Berghof-NSFW-7B.i1-Q4_K_S.gguf"
-                exit 1
-            }
-        else
-            print_error "Neither wget nor curl available for download"
-            print_info "Please download manually from:"
-            print_info "https://huggingface.co/mradermacher/Berghof-NSFW-7B-i1-GGUF?not-for-all-audiences=true&show_file_info=Berghof-NSFW-7B.i1-Q4_K_S.gguf"
-            exit 1
-        fi
-        
-        print_success "Model downloaded successfully"
-    fi
-    
-    # ファイルサイズチェック
-    FILE_SIZE=$(stat -c%s "$MODEL_FILE")
-    FILE_SIZE_GB=$((FILE_SIZE / 1024 / 1024 / 1024))
-    
-    if [ $FILE_SIZE_GB -lt 1 ]; then
-        print_error "Model file seems too small: ${FILE_SIZE_GB}GB"
-        exit 1
-    fi
-    
-    print_success "Model file found: ${FILE_SIZE_GB}GB"
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
-# GPU確認
-check_gpu() {
-    print_info "Checking GPU availability..."
-    
-    if ! command -v nvidia-smi &> /dev/null; then
-        print_error "nvidia-smi not found!"
-        exit 1
-    fi
-    
-    if ! nvidia-smi &> /dev/null; then
-        print_error "nvidia-smi failed to run!"
-        exit 1
-    fi
-    
-    # GPU情報表示
-    GPU_INFO=$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader)
-    print_success "GPU detected: $GPU_INFO"
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Python依存関係確認
-check_python_deps() {
-    print_info "Checking Python dependencies..."
-    
-    # llama-cpp-python確認
-    if ! python -c "import llama_cpp" &> /dev/null; then
-        print_error "llama-cpp-python not installed!"
-        exit 1
-    fi
-    
-    # CUDA対応確認（簡易チェック）
-    LLAMA_VERSION=$(python -c "import llama_cpp; print(llama_cpp.__version__)" 2>/dev/null || echo "unknown")
-    print_success "llama-cpp-python version: $LLAMA_VERSION"
-    
-    # その他の依存関係
-    for package in yaml rich colorama; do
-        if ! python -c "import $package" &> /dev/null; then
-            print_warning "$package not found, installing..."
-            pip install $package
-        fi
-    done
-    
-    print_success "All Python dependencies available"
+print_header() {
+    echo -e "${BLUE}$1${NC}"
 }
 
-# 設定ファイル確認
-check_config() {
-    print_info "Checking configuration..."
-    
-    CONFIG_FILE="/app/config/model_config.yaml"
-    
-    if [ ! -f "$CONFIG_FILE" ]; then
-        print_error "Config file not found: $CONFIG_FILE"
-        exit 1
-    fi
-    
-    # YAML形式確認
-    if ! python -c "import yaml; yaml.safe_load(open('$CONFIG_FILE'))" &> /dev/null; then
-        print_error "Invalid YAML configuration!"
-        exit 1
-    fi
-    
-    print_success "Configuration file is valid"
-}
+# モデルディレクトリ作成
+mkdir -p models
 
-# 権限確認
-check_permissions() {
-    print_info "Checking file permissions..."
-    
-    # スクリプトファイル実行権限
-    chmod +x /app/scripts/*.py 2>/dev/null || true
-    
-    # ログディレクトリ書き込み権限
-    if [ ! -w "/app/logs" ]; then
-        print_error "Cannot write to logs directory!"
-        exit 1
-    fi
-    
-    print_success "File permissions OK"
-}
+# 必要なモデルファイル
+MODEL_FILE="Berghof-NSFW-7B.i1-Q4_K_S.gguf"
+MODEL_PATH="models/$MODEL_FILE"
+EXPECTED_SIZE=4140374464  # 3.9GB in bytes
 
-# メイン実行
-main() {
-    echo "Starting system check..."
+print_header "📋 LlamaCPP Model Requirements"
+echo "Model: $MODEL_FILE"
+echo "Size: 3.9GB (4,140,374,464 bytes)"
+echo "Path: $MODEL_PATH"
+echo ""
+
+# モデルファイル存在確認
+if [ -f "$MODEL_PATH" ]; then
+    # サイズ確認
+    ACTUAL_SIZE=$(stat -c%s "$MODEL_PATH" 2>/dev/null || stat -f%z "$MODEL_PATH" 2>/dev/null)
     
-    check_directories
-    check_model_file
-    check_gpu
-    check_python_deps
-    check_config
-    check_permissions
+    if [ "$ACTUAL_SIZE" -eq "$EXPECTED_SIZE" ]; then
+        print_status "✅ $MODEL_FILE already exists and size is correct!"
+        echo "Size: $(($ACTUAL_SIZE / 1024 / 1024))MB"
+        echo ""
+        print_status "🎉 Model setup complete! Ready to use."
+        exit 0
+    else
+        print_warning "⚠️ $MODEL_FILE exists but size is incorrect"
+        echo "Expected: $(($EXPECTED_SIZE / 1024 / 1024))MB"
+        echo "Actual: $(($ACTUAL_SIZE / 1024 / 1024))MB"
+        echo "Removing corrupted file..."
+        rm -f "$MODEL_PATH"
+    fi
+fi
+
+print_header "📥 Model Download Options"
+echo ""
+
+# Option 1: Hugging Face CLI (推奨)
+print_status "Option 1: Hugging Face CLI (Recommended)"
+echo "1. Install Hugging Face CLI: pip install huggingface_hub"
+echo "2. Download: huggingface-cli download TheBloke/Berghof-NSFW-7B-GGUF $MODEL_FILE --local-dir models/ --local-dir-use-symlinks False"
+echo ""
+
+# Option 2: Copy from Windows (if available)
+WINDOWS_PATH="/mnt/c/Users/adama/Downloads/$MODEL_FILE"
+if [ -f "$WINDOWS_PATH" ]; then
+    print_status "Option 2: Copy from Windows Downloads (Available!)"
+    echo "Found: $WINDOWS_PATH"
+    echo "Execute: cp \"$WINDOWS_PATH\" models/"
+    echo ""
     
+    read -p "Copy from Windows Downloads now? [y/N]: " -n 1 -r
     echo
-    print_success "✨ All checks passed! System is ready."
-    print_info "Run 'python /app/scripts/model_test.py' for detailed testing"
-    print_info "Run 'python /app/scripts/chat_cli.py' to start chatting"
-}
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        print_status "Copying from Windows Downloads..."
+        cp "$WINDOWS_PATH" models/
+        
+        # Verify copied file
+        if [ -f "$MODEL_PATH" ]; then
+            COPIED_SIZE=$(stat -c%s "$MODEL_PATH" 2>/dev/null || stat -f%z "$MODEL_PATH" 2>/dev/null)
+            if [ "$COPIED_SIZE" -eq "$EXPECTED_SIZE" ]; then
+                print_status "✅ Copy successful! Size verified."
+                echo "🎉 Model setup complete! Ready to use."
+                exit 0
+            else
+                print_error "❌ Copy failed! Size mismatch."
+                rm -f "$MODEL_PATH"
+            fi
+        fi
+    fi
+else
+    print_warning "Option 2: Copy from Windows Downloads (Not Available)"
+    echo "File not found: $WINDOWS_PATH"
+    echo ""
+fi
 
-# エラーハンドリング
-trap 'print_error "Setup failed on line $LINENO"' ERR
+# Option 3: Direct download with wget (backup)
+print_status "Option 3: Direct Download (Fallback)"
+echo "If other methods fail, try manual download from:"
+echo "https://huggingface.co/TheBloke/Berghof-NSFW-7B-GGUF/resolve/main/$MODEL_FILE"
+echo ""
 
-# 実行
-main "$@"
+# Try Hugging Face CLI automatically
+print_header "🚀 Attempting automatic download..."
+
+if command -v huggingface-cli &> /dev/null; then
+    print_status "Hugging Face CLI detected, attempting download..."
+    
+    # Try download
+    if huggingface-cli download TheBloke/Berghof-NSFW-7B-GGUF "$MODEL_FILE" --local-dir models/ --local-dir-use-symlinks False; then
+        # Verify downloaded file
+        if [ -f "$MODEL_PATH" ]; then
+            DOWNLOADED_SIZE=$(stat -c%s "$MODEL_PATH" 2>/dev/null || stat -f%z "$MODEL_PATH" 2>/dev/null)
+            if [ "$DOWNLOADED_SIZE" -eq "$EXPECTED_SIZE" ]; then
+                print_status "✅ Download successful! Size verified."
+                echo "🎉 Model setup complete! Ready to use."
+                exit 0
+            else
+                print_error "❌ Download failed! Size mismatch."
+                rm -f "$MODEL_PATH"
+            fi
+        fi
+    else
+        print_warning "Automatic download failed"
+    fi
+else
+    print_warning "Hugging Face CLI not installed"
+    echo "Install with: pip install huggingface_hub"
+fi
+
+echo ""
+print_header "🔧 Manual Setup Required"
+print_error "Automatic model download failed!"
+echo ""
+print_status "Please manually download the model using one of these methods:"
+echo ""
+echo "Method 1 - Hugging Face CLI:"
+echo "  pip install huggingface_hub"
+echo "  huggingface-cli download TheBloke/Berghof-NSFW-7B-GGUF $MODEL_FILE --local-dir models/ --local-dir-use-symlinks False"
+echo ""
+echo "Method 2 - Browser Download:"
+echo "  1. Visit: https://huggingface.co/TheBloke/Berghof-NSFW-7B-GGUF"
+echo "  2. Download: $MODEL_FILE"
+echo "  3. Copy to: $(pwd)/models/"
+echo ""
+echo "Method 3 - Windows Copy:"
+echo "  cp \"/mnt/c/Users/adama/Downloads/$MODEL_FILE\" models/"
+echo ""
+print_status "After downloading, verify with:"
+echo "  ls -lh models/$MODEL_FILE"
+echo "  # Should show ~3.9GB file"
+echo ""
+print_status "📖 For detailed instructions, see: ../MODEL_DOWNLOAD_GUIDE.md"
+
+exit 1
