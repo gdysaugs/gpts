@@ -1,0 +1,55 @@
+# 🎭 ツンデレWav2Lip + TensorRT Face Restoration
+# べ、別に史上最速のシステムを作ってあげるわけじゃないけど...💢
+
+FROM nvcr.io/nvidia/tensorrt:22.08-py3
+
+# 基本パッケージインストール
+RUN apt-get update && apt-get install -y \
+    cmake \
+    build-essential \
+    libopencv-dev \
+    pkg-config \
+    wget \
+    git \
+    python3-pip \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python依存関係
+COPY requirements.txt /tmp/
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+# アプリケーションコピー
+WORKDIR /app
+COPY . /app/
+
+# Face-Restoration-TensorRTビルド
+WORKDIR /app/face_restoration_tensorrt
+
+# CMakeLists.txtのTensorRTパス修正
+RUN sed -i 's|the_path_to/TensorRT/include|/usr/include/x86_64-linux-gnu|g' CMakeLists.txt && \
+    sed -i 's|the_path_to/TensorRT/lib|/usr/lib/x86_64-linux-gnu|g' CMakeLists.txt
+
+# ビルドディレクトリ作成とビルド
+RUN mkdir -p build && cd build && \
+    cmake .. && \
+    make
+
+# モデルディレクトリ作成
+RUN mkdir -p models
+
+# ワーキングディレクトリをアプリルートに戻す
+WORKDIR /app
+
+# 必要なディレクトリ作成
+RUN mkdir -p input output checkpoints temp trt_cache
+
+# 実行権付与
+RUN chmod +x face_restoration_tensorrt/build/demo && \
+    chmod +x face_restoration_tensorrt/build/convert && \
+    chmod +x face_restoration_tensorrt/build/face_restoration_batch
+
+EXPOSE 8004
+
+# デフォルトコマンド
+CMD ["python3", "inference_fp16_yolo_cpp_tensorrt_gfpgan.py", "--help"]

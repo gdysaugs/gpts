@@ -1,0 +1,224 @@
+# CodeFormer統合版Dockerfile - べ、別にあなたのためにCodeFormer対応してあげるわけじゃないけど！💢
+FROM nvcr.io/nvidia/pytorch:24.01-py3
+
+# 環境変数設定
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONPATH=/app
+ENV CUDA_VISIBLE_DEVICES=0
+ENV PIP_NO_CACHE_DIR=1
+# headless環境設定（べ、別にあなたのためじゃないんだからね！）
+ENV QT_QPA_PLATFORM=offscreen
+ENV DISPLAY=:99
+ENV MPLBACKEND=Agg
+
+# ========== STAGE 1: システム依存関係（CodeFormer対応版） ==========
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libglib2.0-0 \
+    libgl1-mesa-glx \
+    git \
+    wget \
+    build-essential \
+    libopenblas-dev \
+    liblapack-dev \
+    libx11-dev \
+    libgtk-3-dev \
+    pkg-config \
+    libavcodec-dev \
+    libavformat-dev \
+    libswscale-dev \
+    libv4l-dev \
+    libtbb-dev \
+    libeigen3-dev \
+    libdc1394-dev \
+    libxss1 \
+    python3-dev \
+    xvfb \
+    x11-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# CMakeアップデート
+RUN wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null && \
+    echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ jammy main' | tee /etc/apt/sources.list.d/kitware.list >/dev/null && \
+    apt-get update && \
+    apt-get install -y cmake && \
+    rm -rf /var/lib/apt/lists/*
+
+# ========== STAGE 2: 基本Python依存関係（CodeFormer最適化） ==========
+RUN pip install --no-cache-dir \
+    numpy==1.26.1 \
+    scipy==1.11.3
+
+RUN pip install --no-cache-dir opencv-python==4.5.5.64
+
+# ========== STAGE 3: PyTorch（安定版） ==========
+RUN pip install --no-cache-dir \
+    torch==2.1.0 \
+    torchvision==0.16.0 \
+    torchaudio==2.1.0
+
+# ========== STAGE 4: 音声・動画処理 ==========
+RUN pip install --no-cache-dir \
+    librosa==0.10.1 \
+    moviepy==1.0.3 \
+    imageio-ffmpeg==0.4.9
+
+# ========== STAGE 5: dlibビルド（顔検出のために必須） ==========
+ENV CMAKE_ARGS="-DCMAKE_BUILD_TYPE=Release -DDLIB_NO_GUI_SUPPORT=ON -DDLIB_USE_CUDA=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+RUN pip install --no-cache-dir dlib==19.22.1 || \
+    pip install --no-cache-dir --no-binary=dlib dlib==19.22.1 || \
+    pip install --no-cache-dir face-recognition || \
+    (wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
+     bash Miniconda3-latest-Linux-x86_64.sh -b -p /opt/conda && \
+     export PATH="/opt/conda/bin:$PATH" && \
+     /opt/conda/bin/conda install -c conda-forge dlib -y && \
+     rm Miniconda3-latest-Linux-x86_64.sh)
+
+ENV PATH="/opt/conda/bin:$PATH"
+
+# ========== STAGE 6: CodeFormer専用依存関係（重要！） ==========
+# BasicSR（CodeFormerのベース）
+RUN pip install --no-cache-dir \
+    basicsr==1.4.2
+
+# FaceXLib専用依存関係（CodeFormerのfacelib問題解決）
+RUN pip install --no-cache-dir \
+    filterpy \
+    numba \
+    scipy \
+    filterpy
+
+# FaceLib直接インストール（最新版）
+RUN pip install --no-cache-dir \
+    facexlib
+
+# CodeFormer必須依存関係（参考リポジトリより）
+RUN pip install --no-cache-dir \
+    addict \
+    future \
+    lmdb \
+    pyyaml \
+    requests \
+    scikit-image \
+    tb-nightly \
+    yapf \
+    lpips \
+    gdown
+
+# GFPGAN（フォールバック用）
+RUN pip install --no-cache-dir \
+    gfpgan==1.3.8
+
+# バッチ処理用
+RUN pip install --no-cache-dir \
+    --no-deps batch-face==1.4.0
+
+# ========== STAGE 6.5: CodeFormerリポジトリクローン（重要！） ==========
+WORKDIR /tmp
+
+# CodeFormerを完全にクローンしてPythonPathに追加
+RUN git clone https://github.com/sczhou/CodeFormer.git && \
+    cd CodeFormer && \
+    # BasicSRセットアップ
+    python basicsr/setup.py develop && \
+    # CodeFormer全体を/opt/にインストール
+    cp -r . /opt/CodeFormer
+
+# FaceLibを直接CodeFormerから取得
+RUN git clone https://github.com/xinntao/facexlib.git /opt/facexlib && \
+    cd /opt/facexlib && \
+    pip install -e .
+
+# PythonPathにCodeFormerとfacelibを追加
+ENV PYTHONPATH="${PYTHONPATH}:/opt/CodeFormer:/opt/facexlib:/app"
+
+# CodeFormerのPythonパッケージとして認識させる
+RUN echo "import sys; sys.path.insert(0, '/opt/CodeFormer')" > /usr/local/lib/python3.10/dist-packages/codeformer_path.pth
+RUN echo "import sys; sys.path.insert(0, '/opt/facexlib')" > /usr/local/lib/python3.10/dist-packages/facelib_path.pth
+
+# 一時ファイル削除
+RUN rm -rf /tmp/CodeFormer
+
+# ========== STAGE 7: 他の依存関係 ==========
+RUN pip install --no-cache-dir \
+    importlib-metadata==6.8.0 \
+    ipython==8.16.1
+
+RUN pip install --no-cache-dir \
+    click \
+    rich \
+    loguru \
+    ultralytics
+
+# ========== STAGE 8: FastAPI Web Server ==========
+RUN pip install --no-cache-dir \
+    fastapi>=0.104.0 \
+    uvicorn[standard]>=0.24.0 \
+    python-multipart>=0.0.6 \
+    aiofiles>=23.0.0 \
+    starlette>=0.27.0 \
+    requests>=2.31.0 \
+    psutil>=5.9.0
+
+# ========== STAGE 9: ONNX最適化 ==========
+RUN pip install --no-cache-dir \
+    onnxruntime-gpu>=1.16.0 \
+    omegaconf
+
+# OpenCV再インストール（互換性確保）
+RUN pip install --force-reinstall --no-deps opencv-python==4.5.5.64
+
+# ========== STAGE 10: アプリケーション ==========
+WORKDIR /app
+
+# ディレクトリ作成
+RUN mkdir -p /app/{input,output,logs,models,scripts,config,checkpoints/CodeFormer}
+
+# requirements.txtを先にコピー
+COPY requirements*.txt /app/
+
+# アプリケーションコード
+COPY . /app/
+
+# CodeFormerモデル自動ダウンロード用スクリプト作成
+RUN echo '#!/bin/bash\n\
+echo "🚀 CodeFormerモデルダウンロード開始💕"\n\
+mkdir -p /app/checkpoints/CodeFormer\n\
+cd /app/checkpoints/CodeFormer\n\
+if [ ! -f "codeformer.pth" ]; then\n\
+    echo "CodeFormerモデルをダウンロード中..."\n\
+    wget -O codeformer.pth https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth\n\
+    echo "✅ CodeFormerモデルダウンロード完了"\n\
+else\n\
+    echo "✅ CodeFormerモデルは既に存在します"\n\
+fi\n\
+echo "やったじゃない！CodeFormer準備完了よ✨"' > /app/scripts/download_codeformer_model.sh && \
+    chmod +x /app/scripts/download_codeformer_model.sh
+
+# ========== STAGE 11: 検証（CodeFormer完全確認） ==========
+RUN python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
+RUN python -c "import cv2; print('OpenCV version:', cv2.__version__)"
+RUN python -c "import dlib; print('dlib imported successfully!')"
+RUN python -c "import fastapi; print('FastAPI version:', fastapi.__version__)"
+RUN python -c "import basicsr; print('BasicSR imported successfully!')"
+RUN python -c "from basicsr.utils.registry import ARCH_REGISTRY; print('ARCH_REGISTRY available')"
+RUN python -c "import onnxruntime; print('ONNX Runtime providers:', onnxruntime.get_available_providers())"
+
+# CodeFormer専用検証
+RUN python -c "import facelib; print('✅ facelib imported successfully!')"
+RUN python -c "from facelib.utils.face_restoration_helper import FaceRestoreHelper; print('✅ FaceRestoreHelper available')"
+RUN python -c "from facelib.utils.misc import is_gray; print('✅ facelib.utils.misc available')"
+RUN python -c "from basicsr.utils import img2tensor, tensor2img; print('✅ BasicSR utils available')"
+RUN python -c "from basicsr.utils.download_util import load_file_from_url; print('✅ BasicSR download utils available')"
+
+# CodeFormer完全検証
+RUN python -c "import sys; sys.path.insert(0, '/opt/CodeFormer'); from basicsr.utils.registry import ARCH_REGISTRY; print('✅ ARCH_REGISTRY from CodeFormer:', 'CodeFormer' in str(ARCH_REGISTRY._obj_map.keys()))"
+
+# ポート公開
+EXPOSE 8002
+
+# デフォルト実行コマンド
+CMD ["python", "inference_fp16_yolo_codeformer.py"]

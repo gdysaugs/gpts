@@ -1,10 +1,16 @@
 # Model files (too large for git)
 models/
+checkpoints/
+onnx_models/
+tensorrt_engines/
 *.ckpt
 *.pth
 *.bin
 *.pt
 *.gguf
+*.onnx
+*.trt
+*.pk1
 
 # Logs
 logs/

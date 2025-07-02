@@ -1,0 +1,7 @@
+# テスト用設定
+video_path: /app/input/test_video.mp4
+audio_path: /app/input/test_audio.wav
+output_path: /app/output/result.mp4
+quality: Improved
+device: cuda
+tsundere_mode: true

@@ -1,0 +1,178 @@
+# ツンデレWav2Lip設定ファイル
+# べ、別にあなたのためじゃないけど...設定を整理してあげたわよ！
+
+# === システム設定 ===
+system:
+  device: "cuda"  # cuda/cpu
+  gpu_id: 0
+  tensorrt_optimize: false  # TensorRT最適化（RTX 3050推奨）
+  fp16_mode: true          # FP16混合精度（VRAM節約）
+  batch_size: 1            # バッチサイズ（RTX 3050では1推奨）
+  num_workers: 2           # データローダーワーカー数
+
+# === ツンデレモード設定 ===
+tsundere:
+  enabled: true
+  phrase_frequency: 0.1    # ツンデレフレーズ頻度 (0.0-1.0)
+  verbose_mode: true       # 詳細ツンデレコメント
+  success_celebration: true # 成功時の特別メッセージ
+
+# === YOLO11設定 ===
+yolo:
+  model_size: "yolo11n"    # yolo11n/s/m/l/x (n=最速, x=最高精度)
+  confidence_threshold: 0.7
+  nms_threshold: 0.4
+  max_detections: 5        # 最大検出顔数
+  track_faces: true        # 顔追跡有効
+  
+  # RTX 3050最適化
+  input_size: 640          # 入力解像度
+  half_precision: true     # FP16最適化
+  
+# === 顔検出・整列設定 ===
+face_processing:
+  alignment_method: "landmarks"  # bbox/landmarks
+  target_size: [288, 192]        # Wav2Lip標準サイズ [width, height]
+  padding: 20                    # 顔領域パディング (px)
+  
+  # 顔品質フィルタ
+  min_face_size: 80             # 最小顔サイズ (px)
+  min_quality_score: 0.3        # 最小品質スコア
+  brightness_range: [0.2, 0.8]  # 明度範囲
+  
+# === Wav2Lip設定 ===
+wav2lip:
+  model_type: "wav2lip_gan"     # wav2lip/wav2lip_gan
+  quality_mode: "Improved"      # Fast/Improved/Enhanced
+  
+  # 音声処理
+  audio_sample_rate: 16000
+  mel_spectrogram:
+    n_mels: 80
+    hop_length: 160
+    win_length: 400
+    
+  # 顔合成設定
+  face_restore: true            # 顔画質復元
+  mask_feathering: 2.0          # マスクフェザリング強度
+  blend_ratio: 0.8              # 合成比率
+
+# === 品質設定詳細 ===
+quality_settings:
+  Fast:
+    description: "最高速度 - 直接合成"
+    gfpgan_enabled: false
+    mask_enabled: false
+    processing_time_target: "リアルタイム"
+    
+  Improved:
+    description: "バランス型 - フェザーマスク付き"
+    gfpgan_enabled: false
+    mask_enabled: true
+    mask_size: 2.5
+    feathering: 2.0
+    processing_time_target: "1-2倍速"
+    
+  Enhanced:
+    description: "最高品質 - GFPGAN顔復元付き"
+    gfpgan_enabled: true
+    mask_enabled: true
+    mask_size: 3.0
+    feathering: 3.0
+    upscale_factor: 2
+    face_restore_weight: 0.5
+    processing_time_target: "3-5倍速"
+
+# === 出力設定 ===
+output:
+  video_codec: "libx264"
+  audio_codec: "aac"
+  video_bitrate: "5000k"
+  audio_bitrate: "128k"
+  fps: 25                       # 出力FPS (Wav2Lip標準)
+  
+  # ファイル命名
+  suffix_template: "_tsundere_lipsync"
+  include_timestamp: false
+  include_settings: false       # 設定情報をファイル名に含める
+
+# === バッチ処理設定 ===
+batch:
+  parallel_jobs: 1              # 並列ジョブ数 (RTX 3050では1推奨)
+  auto_cleanup: true            # 一時ファイル自動削除
+  progress_update_interval: 10  # 進捗更新間隔 (フレーム数)
+  
+  # エラーハンドリング
+  skip_on_error: true
+  max_retries: 2
+  timeout_seconds: 3600         # 1時間タイムアウト
+
+# === デバッグ設定 ===
+debug:
+  save_intermediate: false      # 中間結果保存
+  log_level: "INFO"            # DEBUG/INFO/WARNING/ERROR
+  performance_profiling: false  # パフォーマンス計測
+  
+  # 可視化
+  show_face_detection: false    # 顔検出結果表示
+  show_alignment: false         # 顔整列結果表示
+  debug_output_dir: "./debug"   # デバッグ出力ディレクトリ
+
+# === モデルパス ===
+model_paths:
+  yolo:
+    yolo11n: "/app/models/yolo/yolo11n.pt"
+    yolo11s: "/app/models/yolo/yolo11s.pt"
+    yolo11m: "/app/models/yolo/yolo11m.pt"
+    
+  wav2lip:
+    standard: "/app/models/wav2lip/wav2lip.pth"
+    gan: "/app/models/wav2lip/wav2lip_gan.pth"
+    
+  face_detection:
+    retinaface: "/app/models/face_detection/retinaface_resnet50.pth"
+    dlib_68: "/app/models/face_detection/shape_predictor_68_face_landmarks.dat"
+    
+  enhancement:
+    gfpgan: "/app/models/gfpgan/GFPGANv1.4.pth"
+
+# === RTX 3050最適化プリセット ===
+rtx3050_optimization:
+  # メモリ最適化
+  max_vram_usage: "7GB"         # 8GB中7GB使用
+  gradient_checkpointing: true
+  mixed_precision: true
+  
+  # 処理最適化
+  optimal_batch_size: 1
+  optimal_resolution: 720       # 720p推奨
+  tensorrt_precision: "FP16"
+  
+  # 並列処理
+  cpu_workers: 2
+  gpu_streams: 1
+  prefetch_factor: 2
+
+# === 使用例コマンド ===
+# べ、別に使い方を教えてあげるわけじゃないんだからね！
+examples:
+  basic: |
+    python tsundere_cli.py generate \
+      --video input.mp4 \
+      --audio speech.wav \
+      --output result.mp4
+      
+  high_quality: |
+    python tsundere_cli.py generate \
+      --video input.mp4 \
+      --audio speech.wav \
+      --output result.mp4 \
+      --quality Enhanced \
+      --tensorrt
+      
+  batch_processing: |
+    python tsundere_cli.py batch \
+      --input-dir ./videos/ \
+      --audio-file speech.wav \
+      --output-dir ./output/ \
+      --quality Improved

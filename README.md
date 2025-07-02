@@ -81,9 +81,35 @@ gpts/
 - **GPU加速**: WSL2 + Docker環境でRTX 3050最適化
 - **2つのモデル**: 標準v2モデルと日本語専用モデル
 
-### 基本的な使用方法
+### 推奨使用方法
 
-#### 標準v2モデル
+#### ⭐ FastAPIサーバー（推奨・本格利用）
+**特徴**: 初期化1回のみ、以降3秒/回の高速応答
+```bash
+cd Gptsovits
+
+# 1. サーバー起動（初期化20秒、1回のみ）
+docker run --gpus all -d -p 8000:8000 --privileged --name gpt-sovits-api \
+  -v $(pwd)/input:/app/input \
+  -v $(pwd)/output:/app/output \
+  -v $(pwd)/scripts:/app/scripts \
+  -v $(pwd)/models/v4/GPT-SoVITS/gpt-sovits-ja-h:/app/GPT_SoVITS/pretrained_models/gpt-sovits-ja-h \
+  -v /usr/lib/wsl:/usr/lib/wsl \
+  -e LD_LIBRARY_PATH=/usr/lib/wsl/lib \
+  gpt-sovits:v4 bash -c "pip install fastapi uvicorn python-multipart && python /app/scripts/fastapi_voice_server.py"
+
+# 2. API呼び出し（3秒で完了）
+curl -G "http://localhost:8000/clone-voice-simple" \
+  --data-urlencode "ref_text=おはようございます" \
+  --data-urlencode "target_text=FastAPIで高速音声生成テストです" > output/fastapi_result.wav
+
+# 3. サーバー停止
+docker stop gpt-sovits-api && docker rm gpt-sovits-api
+```
+
+#### CLI版（開発・テスト用）
+
+##### 標準v2モデル
 ```bash
 cd Gptsovits
 docker run --gpus all --rm \
@@ -99,7 +125,7 @@ docker run --gpus all --rm \
   --output /app/output/cloned_voice.wav
 ```
 
-#### 日本語専用モデル（感情表現）
+##### 日本語専用モデル（感情表現）
 ```bash
 docker run --gpus all --rm \
   --privileged \
@@ -114,6 +140,23 @@ docker run --gpus all --rm \
   --target-text "わあああ！すごい！本当に素晴らしい結果です！" \
   --sovits-model "/app/GPT_SoVITS/pretrained_models/gpt-sovits-ja-h/hscene-e17.ckpt" \
   --output /app/output/emotional_result.wav
+```
+
+##### Warm-up最適化版（連続処理用）
+```bash
+docker run --gpus all --rm \
+  --privileged \
+  -v $(pwd)/input:/app/input \
+  -v $(pwd)/output:/app/output \
+  -v $(pwd)/scripts:/app/scripts \
+  -v $(pwd)/models/v4/GPT-SoVITS/gpt-sovits-ja-h:/app/GPT_SoVITS/pretrained_models/gpt-sovits-ja-h \
+  -v /usr/lib/wsl:/usr/lib/wsl \
+  -e LD_LIBRARY_PATH=/usr/lib/wsl/lib \
+  gpt-sovits:v4 python /app/scripts/test_voice_clone_warmup.py \
+  --ref-audio /app/input/reference_5sec.wav \
+  --ref-text "おはようございます" \
+  --target-text "Warm-up最適化版のテストです" \
+  --output /app/output/warmup_result.wav
 ```
 
 ## 🤖 LlamaCPP ローカルLLM
@@ -169,28 +212,95 @@ docker run --gpus all --rm -it \
 - **RAM**: 16GB以上推奨
 - **Storage**: 50GB以上の空き容量
 
-### 必要なソフトウェア
-- Docker（WSL2内、**Docker Desktopではない**）
-- NVIDIA Container Toolkit
-- Git LFS（GPT-SoVITSモデル用）
+### 必要なソフトウェアとセットアップ
+
+#### 1. Docker環境
+- **Docker（WSL2内、Docker Desktopではない）**
+- **NVIDIA Container Toolkit**（GPUアクセス必須）
+- **Git LFS**（GPT-SoVITSモデル用）
+
+#### 2. NVIDIA Container Toolkit インストール手順
+```bash
+# 1. GPGキーとリポジトリ追加
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+# 2. インストール
+sudo apt update
+sudo apt install -y nvidia-container-toolkit
+
+# 3. Docker再起動
+sudo systemctl restart docker
+
+# 4. 動作確認
+docker run --gpus all --rm --privileged \
+  -v /usr/lib/wsl:/usr/lib/wsl \
+  -e LD_LIBRARY_PATH=/usr/lib/wsl/lib \
+  gpt-sovits:v4 nvidia-smi
+```
 
 ## 🔧 トラブルシューティング
 
-### GPU認識問題
-```bash
-# GPU確認
-docker run --gpus all --rm nvidia/cuda:12.1-runtime-ubuntu20.04 nvidia-smi
+### 🚨 今回の詰まったポイントと解決策
 
-# NVIDIA Container Toolkit再インストール
-sudo apt update && sudo apt install nvidia-container-toolkit
-sudo systemctl restart docker
+#### ❌ NVIDIA Container Toolkit未インストール
+**症状**: `docker: Error response from daemon: could not select device driver with capabilities: [[gpu]]`
+```bash
+# 解決策: 上記インストール手順を実行
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+# 以下、上記手順通り実行
 ```
 
-### WSL2 GPU アクセス問題
-必須フラグを確認：
-- `--privileged`
-- `-v /usr/lib/wsl:/usr/lib/wsl`  
-- `-e LD_LIBRARY_PATH=/usr/lib/wsl/lib`
+#### ❌ 不正なCUDAイメージ名
+**症状**: `manifest for nvidia/cuda:12.1-runtime-ubuntu20.04 not found`
+```bash
+# ❌ 失敗例
+docker run --gpus all --rm nvidia/cuda:12.1-runtime-ubuntu20.04 nvidia-smi
+
+# ✅ 正解: ビルド済みイメージで確認
+docker run --gpus all --rm --privileged \
+  -v /usr/lib/wsl:/usr/lib/wsl \
+  -e LD_LIBRARY_PATH=/usr/lib/wsl/lib \
+  gpt-sovits:v4 nvidia-smi
+```
+
+#### ❌ WSL2 GPU アクセス設定不備
+**症状**: `RuntimeError: Unexpected error from cudaGetDeviceCount()`
+```bash
+# 必須フラグ（全て必要）
+--privileged                          # WSL2権限
+-v /usr/lib/wsl:/usr/lib/wsl         # WSL2ライブラリマウント
+-e LD_LIBRARY_PATH=/usr/lib/wsl/lib  # WSL2ライブラリパス
+```
+
+#### ❌ スクリプトファイル見つからない
+**症状**: `can't open file '/app/scripts/test_voice_clone_ja_complete.py'`
+```bash
+# 解決策: scriptsディレクトリもマウントする
+-v $(pwd)/scripts:/app/scripts  # この行を追加
+```
+
+### GPU認識問題（基本）
+```bash
+# GPU確認（RTX 3050の場合）
+nvidia-smi  # ホストで確認
+
+# Docker内でGPU確認
+docker run --gpus all --rm --privileged \
+  -v /usr/lib/wsl:/usr/lib/wsl \
+  -e LD_LIBRARY_PATH=/usr/lib/wsl/lib \
+  gpt-sovits:v4 nvidia-smi
+```
+
+### パフォーマンス問題
+**症状**: 音声生成が遅い（20秒以上）
+```bash
+# ✅ 解決策: FastAPIサーバー使用（3秒/回）
+# 上記「FastAPIサーバー（推奨・本格利用）」を参照
+```
 
 ### モデルダウンロード失敗
 ```bash
@@ -201,12 +311,27 @@ cd Gptsovits && ./scripts/download_models.sh
 cd llamacpp && ./scripts/setup_model.sh
 ```
 
-## 📊 パフォーマンス
+## 📊 パフォーマンス（RTX 3050基準）
 
-### GPT-SoVITS
-- **生成速度**: 5秒音声→6秒生成（RTX 3050）
+### GPT-SoVITS 実測値
+
+| 方式 | 初期化時間 | 生成時間/回 | 総時間 | 使用場面 |
+|------|------------|-------------|--------|----------|
+| **FastAPI** | 20秒（1回のみ） | **3秒** | **3秒** | 🥇 **本格利用推奨** |
+| Warm-up版 | 21秒（毎回） | 2.7秒 | 35秒 | 🥈 連続処理用 |
+| 通常版 | 25秒（毎回） | 20秒 | 45秒 | 🥉 開発・テスト用 |
+
+#### FastAPIサーバーの圧倒的優位性
+- **初期化**: 20秒（起動時1回のみ）
+- **レスポンス**: 3秒/リクエスト（7.5倍高速化）
+- **並列処理**: 複数リクエスト同時処理可能
+- **RESTful API**: プログラムから簡単呼び出し
+
+#### 技術仕様
 - **VRAM使用量**: 4-6GB（FP16で2-3GB可能）
-- **音質**: RMS=25-35, 非無音率80%+
+- **音質**: RMS=25-35, 非無音率60-80%
+- **対応モデル**: 標準v2、日本語専用（hscene-e17.ckpt）
+- **最適化**: TensorCore + Torch.compile + FP16
 
 ### LlamaCPP
 - **応答速度**: 1.03秒/質問（直接CLI）

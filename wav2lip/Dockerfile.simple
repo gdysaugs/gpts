@@ -1,0 +1,55 @@
+# シンプル版Dockerfile - wav2lip-yolo
+# べ、別にシンプルにしたからって手抜きじゃないんだからね！
+
+FROM nvcr.io/nvidia/pytorch:24.01-py3
+
+# 環境変数設定
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONPATH=/app
+ENV CUDA_VISIBLE_DEVICES=0
+
+# 基本的なシステム依存関係のみインストール
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libglib2.0-0 \
+    git \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# 作業ディレクトリ
+WORKDIR /app
+
+# アプリケーションコードコピー
+COPY . /app/
+
+# Python依存関係インストール（必要最小限）
+RUN pip install --no-cache-dir \
+    opencv-python \
+    numpy \
+    scipy \
+    librosa \
+    moviepy \
+    imageio \
+    ffmpeg-python \
+    ultralytics \
+    torch==2.1.0 \
+    torchvision==0.16.0 \
+    torchaudio==2.1.0 \
+    click \
+    rich \
+    loguru \
+    tqdm \
+    pyyaml \
+    gdown
+
+# ディレクトリ作成
+RUN mkdir -p /app/{input,output,logs,models,scripts,config}
+
+# ポート公開（API用）
+EXPOSE 8000
+
+# デフォルトコマンド
+CMD ["python", "--version"]

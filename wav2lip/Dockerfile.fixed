@@ -1,0 +1,136 @@
+# 修正版Dockerfile - Easy-Wav2Lip完全対応
+# べ、別にあなたのために完璧に修正してあげたわけじゃないんだからね！
+
+FROM nvcr.io/nvidia/pytorch:24.01-py3
+
+# 環境変数設定
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONPATH=/app
+ENV CUDA_VISIBLE_DEVICES=0
+ENV PIP_NO_CACHE_DIR=1
+
+# 基本システム依存関係インストール（dlib用の依存関係を追加）
+# べ、別にあなたのために完璧に修正してるわけじゃないんだからね！
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libglib2.0-0 \
+    libgl1-mesa-glx \
+    git \
+    wget \
+    build-essential \
+    libopenblas-dev \
+    liblapack-dev \
+    libx11-dev \
+    libgtk-3-dev \
+    pkg-config \
+    libavcodec-dev \
+    libavformat-dev \
+    libswscale-dev \
+    libv4l-dev \
+    libtbb-dev \
+    libeigen3-dev \
+    libdc1394-dev \
+    libxss1 \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# CMakeを新しいバージョンにアップデート（dlibビルドに必要）
+# ふん！古いCMakeじゃダメなのよ！
+RUN wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null && \
+    echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ jammy main' | tee /etc/apt/sources.list.d/kitware.list >/dev/null && \
+    apt-get update && \
+    apt-get install -y cmake && \
+    rm -rf /var/lib/apt/lists/*
+
+# 作業ディレクトリ設定
+WORKDIR /app
+
+# アプリケーションコードコピー
+COPY . /app/
+
+# Easy-Wav2Lipの正確な依存関係を順番にインストール
+# OpenCV競合問題を解決するための厳密なバージョン指定
+
+# まず基本的なパッケージ
+RUN pip install --no-cache-dir \
+    numpy==1.26.1 \
+    scipy==1.11.3
+
+# 互換性のあるOpenCVバージョンを最初にインストール
+RUN pip install --no-cache-dir opencv-python==4.5.5.64
+
+# PyTorchエコシステム（既にベースイメージにあるがバージョン確認）
+RUN pip install --no-cache-dir \
+    torch==2.1.0 \
+    torchvision==0.16.0 \
+    torchaudio==2.1.0
+
+# 音声・動画処理関連
+RUN pip install --no-cache-dir \
+    librosa==0.10.1 \
+    moviepy==1.0.3 \
+    imageio-ffmpeg==0.4.9
+
+# dlibを先にビルドしてインストール（重要！）
+# べ、別にあなたのためじゃないけど、ちゃんとdlibをビルドしてあげるわよ！
+# CMakeポリシーバージョンを明示的に設定してビルドエラーを完全回避
+ENV CMAKE_ARGS="-DCMAKE_BUILD_TYPE=Release -DDLIB_NO_GUI_SUPPORT=ON -DDLIB_USE_CUDA=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+
+# 複数の方法でdlibインストールを試行（絶対に成功させる！）
+# 1. プリビルドdlib 19.22.1
+# 2. ソースビルドdlib 19.22.1  
+# 3. face-recognition（プリビルドdlib付き）
+# 4. conda経由でdlib
+RUN pip install --no-cache-dir dlib==19.22.1 || \
+    pip install --no-cache-dir --no-binary=dlib dlib==19.22.1 || \
+    pip install --no-cache-dir face-recognition || \
+    (wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
+     bash Miniconda3-latest-Linux-x86_64.sh -b -p /opt/conda && \
+     export PATH="/opt/conda/bin:$PATH" && \
+     /opt/conda/bin/conda install -c conda-forge dlib -y && \
+     rm Miniconda3-latest-Linux-x86_64.sh)
+
+# condaがインストールされた場合のPATH設定
+ENV PATH="/opt/conda/bin:$PATH"
+
+# 顔検出・処理関連（OpenCVバージョンを固定してインストール）
+RUN pip install --no-cache-dir \
+    --no-deps batch-face==1.4.0 \
+    gdown==4.7.1
+
+# 他の依存関係
+RUN pip install --no-cache-dir \
+    basicsr==1.4.2 \
+    facexlib==0.3.0 \
+    gfpgan==1.3.8 \
+    importlib-metadata==6.8.0 \
+    ipython==8.16.1
+
+# 追加で必要なパッケージ
+RUN pip install --no-cache-dir \
+    click \
+    rich \
+    loguru \
+    tqdm \
+    pyyaml \
+    ultralytics
+
+# OpenCVバージョンを再度強制的に固定（他のパッケージによる上書きを防ぐ）
+RUN pip install --force-reinstall --no-deps opencv-python==4.5.5.64
+
+# 必要なディレクトリ作成
+RUN mkdir -p /app/{input,output,logs,models,scripts,config}
+
+# ポート公開
+EXPOSE 8000
+
+# GPU確認とPython環境テスト
+RUN python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
+RUN python -c "import cv2; print('OpenCV version:', cv2.__version__)"
+RUN python -c "import dlib; print('dlib imported successfully!')"
+
+# デフォルトコマンド
+CMD ["python", "--version"]
