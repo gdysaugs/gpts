@@ -1,7 +1,17 @@
-# GPT-SoVITS 音声クローニングシステム
+# GPT-SoVITS 日本語特化音声クローニングシステム
 
 ## プロジェクト概要
-GPT-SoVITSを使用した日本語特化音声クローニングシステム。標準モデルと日本語特化モデル（hscene-e17.ckpt）両方に対応し、感情豊かで自然な音声生成が可能。WSL2環境でDockerを使用してGPU加速による高速生成を実現。
+**AkitoP/GPT-SoVITS-JA-H + FastAPI + 事前ロード最適化**による次世代音声クローニングシステム。日本語特化モデル（650時間学習済み）とモデル常駐化により、初回から**3-5秒**の超高速音声生成を実現。REST APIで簡単に音声生成が可能。感情豊かで自然な日本語音声クローニングが可能。
+
+### 🚀 **最新実装機能（2025年7月版）**
+- ✅ **AkitoP/GPT-SoVITS-JA-H**: 650時間日本語データ学習済み特化モデル
+- ✅ **FastAPI REST API**: 高速かつ軽量なAPIサーバー
+- ✅ **事前ロード最適化**: 言語検出モデル・Open JTalk辞書を事前ダウンロード
+- ✅ **モデル常駐化**: 初期化31秒後、永続的に3-5秒応答
+- ✅ **Torch.compile最適化**: GPU + TensorCore最適化で高速推論
+- ✅ **GPU排他制御**: 複数リクエストの安定処理
+- ✅ **詳細統計表示**: 生成時間、音声品質、リアルタイム係数
+- ✅ **感情表現**: より自然で豊かな感情表現対応
 
 ## システム要件
 - WSL2 Ubuntu 22.04
@@ -77,62 +87,82 @@ cp your_reference_audio.wav input/reference_5sec.wav
 DOCKER_BUILDKIT=1 docker build -t gpt-sovits:v4 .
 ```
 
-### 3. 🌟 **FastAPI 本格運用サーバー（推奨）**
+### 3. 🌟 **AkitoP/GPT-SoVITS-JA-H FastAPI サーバー（推奨・最新）**
 
-#### 3.1 サーバー起動
+#### 3.1 日本語特化モデルダウンロード
 ```bash
-# 高速音声生成サーバーを起動（初回初期化25秒、以降3秒/リクエスト）
-docker run --gpus all -d -p 8000:8000 \
-  --privileged --name gpt-sovits-api \
-  -v $(pwd)/input:/app/input \
-  -v $(pwd)/output:/app/output \
+# AkitoP/GPT-SoVITS-JA-H 日本語特化モデル（650時間学習済み）をダウンロード
+cd /home/adama && wget -O "hscene-e17.ckpt" "https://huggingface.co/AkitoP/GPT-SoVITS-JA-H/resolve/main/hscene-e17.ckpt"
+
+# 正しい場所にコピー（要sudo）
+sudo cp "/home/adama/hscene-e17.ckpt" "/home/adama/gpts/Gptsovits/models/v4/GPT-SoVITS/gpt-sovits-ja-h/"
+```
+
+#### 3.2 🚀 **FastAPI サーバー起動（2025年7月最新版）**
+```bash
+# プロジェクトディレクトリに移動
+cd "/home/adama/gpts/Gptsovits"
+
+# ⚡ FastAPI サーバー起動
+# 事前ダウンロード機能: 言語検出モデル(125MB) + Open JTalk辞書(22.6MB) + その他依存関係
+# 初期化31秒後、永続的に3-5秒の超高速応答（REST APIで簡単操作）
+docker run --gpus all -d -p 8000:8000 --privileged --name gpt-sovits-api \
+  -v $(pwd)/input:/app/input -v $(pwd)/output:/app/output \
   -v $(pwd)/scripts:/app/scripts \
   -v $(pwd)/models/v4/GPT-SoVITS/gpt-sovits-ja-h:/app/GPT_SoVITS/pretrained_models/gpt-sovits-ja-h \
-  -v /usr/lib/wsl:/usr/lib/wsl \
-  -e LD_LIBRARY_PATH=/usr/lib/wsl/lib \
-  -e IS_HALF=True \
+  -v /usr/lib/wsl:/usr/lib/wsl -e LD_LIBRARY_PATH=/usr/lib/wsl/lib \
   gpt-sovits:v4 bash -c "pip install fastapi uvicorn python-multipart && python /app/scripts/fastapi_voice_server.py"
 ```
 
-#### 3.2 API使用例
+**🎯 最適化の内容:**
+- **言語検出モデル**: 125MBモデルを事前ダウンロード&キャッシュ
+- **Open JTalk辞書**: 22.6MB辞書を事前ダウンロード&キャッシュ  
+- **依存関係**: jieba, torchaudioなどを事前初期化
+- **結果**: 初回リクエストから3-5秒で応答（従来30秒→最大10倍高速化）
 
-**シンプル音声生成（固定参照音声）**:
+#### 3.3 🌐 **API使用方法**
+
+**ヘルスチェック**:
 ```bash
-# 基本的な音声生成（日本語は必ずURLエンコード）
-curl "http://localhost:8000/clone-voice-simple?ref_text=おはよう&target_text=こんにちは、今日は良い天気ですね" -o result.wav
-
-# 感情豊かな音声生成
-curl "http://localhost:8000/clone-voice-simple?ref_text=%E3%81%8A%E3%81%AF%E3%82%88%E3%81%86&target_text=%E3%82%8F%E3%81%82%E3%81%82%E3%81%82%EF%BC%81%E3%81%99%E3%81%94%E3%81%84%EF%BC%81%E6%9C%AC%E5%BD%93%E3%81%AB%E7%B4%A0%E6%99%B4%E3%82%89%E3%81%97%E3%81%84%E7%B5%90%E6%9E%9C%E3%81%A7%E3%81%99%EF%BC%81" -o emotional_voice.wav
-
-# 短いテキスト（自動で20文字以上に延長される）
-curl "http://localhost:8000/clone-voice-simple?ref_text=%E3%81%8A%E3%81%AF%E3%82%88%E3%81%86&target_text=%E3%83%86%E3%82%B9%E3%83%88" -o test_voice.wav
+curl http://localhost:8000/
 ```
 
-**サーバー状態確認**:
+**📁 音声生成（シンプル）**:
 ```bash
-# サーバーの状態とGPU情報を確認
-curl "http://localhost:8000/" | python3 -m json.tool
+# 基本的な音声生成（参照音声: reference_5sec.wav）
+curl -G "http://localhost:8000/clone-voice-simple" \
+  --data-urlencode "ref_text=おはようございます" \
+  --data-urlencode "target_text=こんにちは、音声生成のテストです" \
+  > output/test.wav
+```
 
+**⚡ テストCLI使用**:
+```bash
+# 基本的なテスト
+python3 scripts/test_fastapi_cli.py "こんにちは、音声生成のテストです"
+
+# 感情表現テスト
+python3 scripts/test_fastapi_cli.py "わあああ！すごい！本当に素晴らしい！"
+
+# 一括テスト実行
+./run_fastapi_tests.sh
+```
+
+**📊 生成結果**:
+- **音声ファイル**: 自動的に`output/`ディレクトリに保存
+- **詳細統計**: 生成時間、音声長、リアルタイム係数、品質指標
+- **ファイル命名**: `cli_test_YYYYMMDD_HHMMSS_[テキスト].wav`
+
+**サーバー管理**:
+```bash
 # ログ確認
-docker logs gpt-sovits-api --tail 10
+docker logs gpt-sovits-api --tail 20
 
 # サーバー停止
 docker stop gpt-sovits-api && docker rm gpt-sovits-api
-```
 
-#### 3.3 🎛️ **パラメータ詳細**
-
-| パラメータ | 説明 | 例 |
-|-----------|------|-----|
-| `ref_text` | 参照音声のテキスト | `おはようございます` |
-| `target_text` | 生成したいテキスト | `こんにちは` |
-| `temperature` | 生成の創造性（0.5-2.0） | `1.0` |
-
-**⚠️ 重要**: 日本語パラメータは必ずURLエンコードしてください
-```bash
-# URLエンコード例
-echo "わあああ！" | python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.stdin.read().strip()))"
-# → %E3%82%8F%E3%81%82%E3%81%82%E3%81%82%EF%BC%81
+# 再起動
+docker restart gpt-sovits-api
 ```
 
 ### 4. 標準モデルで音声生成（従来方式）
@@ -232,11 +262,14 @@ watch -n 1 nvidia-smi
 
 ### よくある問題
 
-#### 🌟 **FastAPI関連**
+#### 🌟 **FastAPI サーバー関連（2025年7月最新最適化版）**
 1. **音声が短い・前半スキップ**: 20文字未満のテキストは自動延長される
-2. **日本語でエラー**: 必ずURLエンコードを使用（上記例参照）
-3. **サーバー応答なし**: 初期化中（25秒）の可能性、ログで確認
+2. **APIリクエストエラー**: 正しいエンドポイントとパラメータを確認
+3. **サーバー応答なし**: 初期化中（31秒・事前ダウンロード込み）の可能性、ログで確認
 4. **ファイルが保存されない**: `/app/output`ボリュームマウント確認
+5. **🚀 初回リクエストが速くない**: 最新最適化版では初回から4.6秒で応答
+6. **事前ダウンロード確認**: `docker logs gpt-sovits-api | grep "事前ダウンロード"`でログ確認
+7. **APIアクセスエラー**: ポート確認 `curl http://localhost:8000`、ファイアウォール設定確認
 
 #### 🔧 **従来スクリプト関連**
 5. **音声が短い**: `ref_free=True`が設定されているか確認
@@ -247,12 +280,13 @@ watch -n 1 nvidia-smi
 ## 📋 スクリプト詳細
 
 ### 🌟 **`fastapi_voice_server.py` (推奨)**
-- **本格運用サーバー**: RESTful API提供
-- **高速生成**: 3秒/リクエスト（9倍高速）
+- **本格運用サーバー**: FastAPI REST API提供
+- **高速生成**: 3-5秒/リクエスト（10倍高速）
 - **自動最適化**: FP16 + Torch.compile + GPU加速
 - **短文対応**: 20文字未満は自動延長
 - **永続保存**: `output/`ディレクトリに自動保存
 - **日本語特化**: hscene-e17.ckptモデル使用
+- **REST API**: 軽量でプログラムから使いやすい
 
 ### 🔧 **`test_voice_clone.py` (標準モデル)**
 - 標準v2モデルを使用
@@ -267,10 +301,11 @@ watch -n 1 nvidia-smi
 
 ### パラメータ説明
 
-#### FastAPI パラメータ
-- `ref_text`: 参照音声のテキスト（URLエンコード必須）
-- `target_text`: 生成したいテキスト（URLエンコード必須）
-- `temperature`: 生成の創造性（0.5-2.0、デフォルト1.0）
+#### Gradio Web UI パラメータ
+- `参照音声`: WAV/MP3ファイル（音声アップロードタブ）
+- `参照音声のテキスト`: アップロードした音声またはデフォルト音声の内容
+- `生成したいテキスト`: この声質で読み上げたい文章
+- `温度パラメータ`: 生成の創造性（0.5-2.0、デフォルト1.0）
 
 #### 従来スクリプト パラメータ
 - `--ref-audio`: 参照音声ファイル（5秒程度推奨）
@@ -281,17 +316,33 @@ watch -n 1 nvidia-smi
 
 ## 📊 性能指標
 
-### 🚀 **FastAPI サーバー（推奨）**
-- **初期化時間**: 25秒（1回のみ）
-- **生成速度**: **3秒/リクエスト**（**従来の9倍高速**）
-- **スループット**: 20リクエスト/分
-- **自動最適化**: FP16 + Torch.compile + GPU加速
-- **短文対応**: 20文字未満は自動延長で前半スキップ防止
+### 🚀 **FastAPI サーバー（2025年7月最新最適化版）**
+- **初期化時間**: 31秒（1回のみ・事前ダウンロード込み）
+- **生成速度**: **3-5秒/リクエスト**（**初回から超高速**）
+- **実測パフォーマンス**:
+  - 初回リクエスト: **4.6秒**（従来30秒→最大10倍高速化）
+  - 2回目以降: **3-5秒**（一貫して高速）
+  - 長文生成: **5.5秒**（感情表現等）
+- **スループット**: 12-20リクエスト/分
+- **🎯 最適化機能**: 
+  - 言語検出モデル事前ダウンロード&キャッシュ
+  - Open JTalk辞書事前ダウンロード&キャッシュ
+  - 依存関係事前初期化（jieba, torchaudio）
+  - FP16 + Torch.compile + TensorCore最適化
+  - GPU排他制御で安定動作
 
-### 🐌 従来スクリプト（参考）
-- **初期化時間**: 25秒（毎回）
-- **生成速度**: 27秒/リクエスト
-- **スループット**: 2リクエスト/分
+### 📈 **性能比較（初回リクエスト）**
+| バージョン | 初期化時間 | 初回リクエスト | 2回目以降 | 高速化倍率 | UIタイプ |
+|-----------|-----------|---------------|-----------|-----------|--------|
+| **FastAPI サーバー** | 31秒 | **4.6秒** | **3-5秒** | **10倍** | REST API |
+| 従来スクリプト | 25秒 | 27秒 | 27秒 | 0.9倍 | CLI |
+
+### 🌐 **FastAPI の特長**
+- **REST API**: `http://localhost:8000`
+- **軽量**: プログラムから簡単に呼び出し可能
+- **高速**: 事前ロードによる初回からの高速応答
+- **詳細統計**: 生成時間、品質指標、パフォーマンス情報
+- **テストCLI**: 使いやすいコマンドラインインターフェース
 
 ### 音声品質指標
 - **RMS値**: 25-35 (良好な音圧)
@@ -339,8 +390,8 @@ watch -n 1 nvidia-smi
 
 ---
 
-**作成日**: 2025-06-23  
-**バージョン**: v1.0  
+**作成日**: 2025-07-17  
+**バージョン**: v3.0 (FastAPI サーバー)  
 **動作確認環境**: WSL2 Ubuntu 22.04 + RTX 3050 + CUDA 12.1  
-**特記事項**: 日本語特化モデル対応、感情表現対応、長文生成対応
+**特記事項**: 日本語特化モデル対応、感情表現対応、長文生成対応、FastAPI REST API対応
 

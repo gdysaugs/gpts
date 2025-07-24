@@ -131,6 +131,15 @@ class LLMEngine:
                 use_mlock=model_config.get("use_mlock", False),
                 low_vram=model_config.get("low_vram", True),
                 n_threads=model_config.get("n_threads", 8),
+                # GPU最適化追加パラメータ
+                numa=False,  # NUMA無効化でGPU最適化
+                tensor_split=None,  # GPU分散無効
+                rope_freq_base=0.0,  # デフォルト値
+                rope_freq_scale=0.0,  # デフォルト値
+                mul_mat_q=True,  # 量子化行列乗算高速化
+                logits_all=False,  # メモリ節約
+                embedding=False,  # 埋め込み無効
+                offload_kqv=True,  # KQV計算のGPUオフロード
             )
             
             load_time = time.time() - start_time

@@ -1,0 +1,95 @@
+# Super Wav2Lip Complete System - Frontend + Backend
+# FastAPI Backend (GFPGAN強化版) + Gradio Frontend 構成
+
+version: '3.8'
+
+services:
+  # FastAPI Backend - Super Wav2Lip Processing Engine
+  super-wav2lip-backend:
+    image: super-wav2lip:v1-gpu-ultimate
+    container_name: super-wav2lip-optimized
+    restart: unless-stopped
+    
+    # GPU Support for WSL2
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    
+    privileged: true
+    
+    environment:
+      - LD_LIBRARY_PATH=/usr/lib/wsl/lib:/usr/local/lib/python3.10/dist-packages/nvidia/curand/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cublas/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cudnn/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cufft/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cuda_runtime/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cuda_nvrtc/lib
+      - PYTHONPATH=/app/src
+      - PYTHONUNBUFFERED=1
+    
+    volumes:
+      - /usr/lib/wsl:/usr/lib/wsl
+      - ./input:/app/input
+      - ./output:/app/output
+      - ./models:/app/models
+      - ./src:/app/src
+      - ./temp:/app/temp
+    
+    working_dir: /app/src
+    
+    ports:
+      - "8002:8002"
+    
+    networks:
+      - wav2lip-network
+    
+    command: >
+      bash -c "
+      pip install fastapi uvicorn python-multipart &&
+      python fastapi_wav2lip_simple.py
+      "
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    
+    # リソース制限
+    mem_limit: 8g
+    memswap_limit: 8g
+    shm_size: 2g
+
+  # Gradio Frontend - Web UI
+  gradio-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.gradio
+    container_name: super-wav2lip-ui
+    restart: unless-stopped
+    
+    environment:
+      - FASTAPI_URL=http://super-wav2lip-backend:8002
+      - PYTHONUNBUFFERED=1
+    
+    network_mode: host
+    
+    depends_on:
+      super-wav2lip-backend:
+        condition: service_healthy
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+networks:
+  wav2lip-network:
+    driver: bridge
+
+volumes:
+  wav2lip-models:
+  wav2lip-output:
+  wav2lip-temp:

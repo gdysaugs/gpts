@@ -3,14 +3,20 @@ models/
 checkpoints/
 onnx_models/
 tensorrt_engines/
+weights/
+pretrained_models/
 *.ckpt
 *.pth
+*.pth.tar
+*.safetensors
 *.bin
 *.pt
 *.gguf
 *.onnx
 *.trt
 *.pk1
+*.h5
+*.pkl
 
 # Logs
 logs/
@@ -27,6 +33,8 @@ test_*.wav
 # Temporary files
 *.tmp
 *.cache
+temp/
+backup/
 
 # Python
 __pycache__/
@@ -42,3 +50,33 @@ __pycache__/
 # Sensitive files
 *.jsonl
 -home-adama/
+
+# Project specific large directories
+llamacpp/models/*
+llamacpp/logs/*
+Gptsovits/models/*
+faster-sadtalker/checkpoints/*
+faster-sadtalker/gfpgan/weights/*
+sadtalker/faster-SadTalker-API/checkpoints/*
+sadtalker/faster-SadTalker-API/gfpgan/weights/*
+super wav2lip/backup/*
+super wav2lip/src/*
+super wav2lip/models/*
+super wav2lip_backup_gradio3.50/backup/*
+super wav2lip_backup_gradio3.50/src/*
+super wav2lip_backup_gradio3.50/models/*
+wav2lips/gfpgan/weights/*
+
+# Git LFS incomplete files
+.git/lfs/incomplete/
+
+# Large video files
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+
+# Keep specific small files
+!input/*.mp4
+!output/result_*.mp4

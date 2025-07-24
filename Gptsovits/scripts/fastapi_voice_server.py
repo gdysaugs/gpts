@@ -14,6 +14,7 @@ from typing import Optional
 import uuid
 import tempfile
 import base64
+import urllib.request
 
 # FastAPI
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks
@@ -21,6 +22,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
+
+# シンプルなasyncio.Lock使用
 
 # GPT-SoVITS
 os.chdir('/app')
@@ -39,6 +42,13 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="GPT-SoVITS Voice Cloning API", version="1.0.0")
 MODELS_LOADED = False
 CUSTOM_SOVITS_PATH = None
+
+# シンプルなGPU排他制御
+gpu_lock: Optional[asyncio.Lock] = None
+
+# プリロード済みモデルのキャッシュ
+PRELOADED_LANGDETECT = None
+CACHE_DIR = "/app/cache"
 
 # CORS設定（開発用）
 app.add_middleware(
@@ -285,7 +295,7 @@ async def generate_voice_fast(ref_audio_path: str, ref_text: str, target_text: s
         raise HTTPException(status_code=500, detail="モデルが初期化されていません")
     
     # テキストを20文字以上に自動延長
-    target_text = ensure_text_length(target_text, 20)
+    # target_text = ensure_text_length(target_text, 20)  # 自動拡張無効化
     
     generation_start = time.time()
     
@@ -344,12 +354,101 @@ async def generate_voice_fast(ref_audio_path: str, ref_text: str, target_text: s
         logger.error(f"❌ 音声生成エラー: {e}")
         raise HTTPException(status_code=500, detail=f"音声生成失敗: {str(e)}")
 
+# === 事前ダウンロード関数 ===
+
+async def preload_all_dependencies():
+    """全ての依存関係を事前ダウンロード・キャッシュする"""
+    global PRELOADED_LANGDETECT
+    
+    # キャッシュディレクトリ作成
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    
+    # 1. 言語検出モデルの事前ダウンロード
+    logger.info("🔥 言語検出モデル事前ダウンロード中...")
+    try:
+        langdetect_model_path = f"{CACHE_DIR}/lid.176.bin"
+        if not os.path.exists(langdetect_model_path):
+            logger.info("📥 言語検出モデルをダウンロード中...")
+            urllib.request.urlretrieve(
+                "https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.bin",
+                langdetect_model_path
+            )
+            logger.info("✅ 言語検出モデルダウンロード完了")
+        else:
+            logger.info("✅ 言語検出モデル既存キャッシュ使用")
+            
+        # 環境変数でモデルパスを指定
+        os.environ["FASTTEXT_MODEL_PATH"] = langdetect_model_path
+        
+        # モデルをメモリにロード
+        import fast_langdetect
+        from fast_langdetect import detect
+        
+        # 強制的にモデルを初期化してキャッシュ
+        detect("Hello", low_memory=False)
+        detect("こんにちは", low_memory=False)
+        PRELOADED_LANGDETECT = True
+        
+        logger.info("✅ 言語検出モデルプリロード完了")
+    except Exception as e:
+        logger.warning(f"⚠️ 言語検出モデルプリロード失敗: {e}")
+    
+    # 2. Open JTalk辞書の事前ダウンロード
+    logger.info("🔥 Open JTalk辞書事前ダウンロード中...")
+    try:
+        jtalk_dict_path = f"{CACHE_DIR}/open_jtalk_dic_utf_8-1.11.tar.gz"
+        if not os.path.exists(jtalk_dict_path):
+            logger.info("📥 Open JTalk辞書をダウンロード中...")
+            urllib.request.urlretrieve(
+                "https://github.com/r9y9/open_jtalk/releases/download/v1.11.1/open_jtalk_dic_utf_8-1.11.tar.gz",
+                jtalk_dict_path
+            )
+            logger.info("✅ Open JTalk辞書ダウンロード完了")
+        else:
+            logger.info("✅ Open JTalk辞書既存キャッシュ使用")
+            
+        # 環境変数でキャッシュパスを設定
+        os.environ["OPEN_JTALK_DICT_PATH"] = jtalk_dict_path
+        
+        logger.info("✅ Open JTalk辞書プリロード完了")
+    except Exception as e:
+        logger.warning(f"⚠️ Open JTalk辞書プリロード失敗: {e}")
+    
+    # 3. その他の依存関係のプリロード
+    logger.info("🔥 その他依存関係プリロード中...")
+    try:
+        # jieba辞書のプリロード
+        import jieba
+        jieba.initialize()
+        
+        # TorchAudio周りのプリロード
+        import torchaudio
+        torchaudio.set_audio_backend("sox_io")
+        
+        logger.info("✅ その他依存関係プリロード完了")
+    except Exception as e:
+        logger.warning(f"⚠️ その他依存関係プリロード失敗: {e}")
+
 # === FastAPI エンドポイント ===
 
 @app.on_event("startup")
 async def startup_event():
     """サーバー起動時初期化"""
-    await initialize_models()
+    global gpu_lock
+    try:
+        # モデル初期化
+        await initialize_models()
+        
+        # 事前ダウンロードとキャッシュ設定
+        await preload_all_dependencies()
+        
+        # シンプルなasyncio.Lock初期化
+        gpu_lock = asyncio.Lock()
+        logger.info("✅ AsyncIO GPU Lock初期化完了！")
+        
+    except Exception as e:
+        logger.error(f"❌ サーバー初期化失敗: {e}")
+        raise
 
 @app.get("/")
 async def root():
@@ -360,6 +459,81 @@ async def root():
         "gpu_available": torch.cuda.is_available(),
         "gpu_name": torch.cuda.get_device_name() if torch.cuda.is_available() else None
     }
+
+@app.get("/health")
+async def health():
+    """ヘルスチェック（フロントエンド用）"""
+    return {
+        "status": "healthy" if MODELS_LOADED else "initializing",
+        "models_loaded": MODELS_LOADED,
+        "gpu_available": torch.cuda.is_available()
+    }
+
+@app.post("/warmup")
+async def warmup():
+    """ウォームアップエンドポイント。モデルを初期化しテスト音声を生成"""
+    try:
+        logger.info("🔥 SoVITS APIウォームアップ開始...")
+        start_time = time.time()
+        
+        # モデルがロードされていない場合は初期化
+        if not MODELS_LOADED:
+            await initialize_models()
+        
+        # テスト音声生成を実行（タイムアウト付き）
+        try:
+            await asyncio.wait_for(gpu_lock.acquire(), timeout=1.0)
+            try:
+                logger.info("🎤 テスト音声生成中...")
+                
+                # デフォルトの参照音声を使用
+                ref_audio_path = "/app/input/reference_5sec.wav"
+                
+                # テスト音声生成
+                result = await generate_voice_fast(
+                    ref_audio_path=ref_audio_path,
+                    ref_text="こんにちは、調子はどう？",
+                    target_text="テスト音声です。",
+                    temperature=1.0,
+                    top_k=5,
+                    top_p=1.0
+                )
+            finally:
+                gpu_lock.release()
+        except asyncio.TimeoutError:
+            # GPUロック取得失敗時は直接実行
+            logger.warning("⚠️ GPUロックタイムアウト - 直接実行")
+            logger.info("🎤 テスト音声生成中...")
+            
+            # デフォルトの参照音声を使用
+            ref_audio_path = "/app/input/reference_5sec.wav"
+            
+            # テスト音声生成
+            result = await generate_voice_fast(
+                ref_audio_path=ref_audio_path,
+                ref_text="こんにちは、調子はどう？",
+                target_text="テスト音声です。",
+                temperature=1.0,
+                top_k=5,
+                top_p=1.0
+            )
+            
+            warmup_time = time.time() - start_time
+            logger.info(f"✅ SoVITS APIウォームアップ完了: {warmup_time:.2f}秒")
+            
+            return {
+                "status": "success",
+                "message": "SoVITSウォームアップ完了",
+                "warmup_time": warmup_time,
+                "audio_duration": result['audio_duration'],
+                "realtime_factor": result['realtime_factor'],
+                "audio_rms": result['audio_rms'],
+                "models_loaded": MODELS_LOADED
+            }
+            
+    except Exception as e:
+        logger.error(f"❌ SoVITS APIウォームアップエラー: {e}")
+        raise HTTPException(status_code=500, detail=f"Warmup failed: {str(e)}")
 
 @app.post("/clone-voice", response_model=VoiceCloneResponse)
 async def clone_voice_endpoint(
@@ -420,18 +594,40 @@ async def clone_voice_endpoint(
             realtime_factor=0
         )
 
-@app.get("/clone-voice-simple")
+@app.post("/clone-voice-simple")
 async def clone_voice_simple(
-    ref_text: str,
-    target_text: str,
-    temperature: float = 1.0,
+    ref_text: str = Form(...),
+    target_text: str = Form(...),
+    temperature: float = Form(1.0),
+    ref_audio: UploadFile = File(...),
     background_tasks: BackgroundTasks = BackgroundTasks()
 ):
-    """シンプル音声クローニング（固定参照音声）"""
+    """シンプル音声クローニング（アップロード参照音声・GPU排他制御付き）"""
     
+    # 軽量GPU排他制御（タイムアウト付き）
     try:
+        await asyncio.wait_for(gpu_lock.acquire(), timeout=1.0)
+        try:
+            return await _execute_voice_synthesis_with_ref(ref_text, target_text, temperature, ref_audio, background_tasks)
+        finally:
+            gpu_lock.release()
+    except asyncio.TimeoutError:
+        # GPUロック取得失敗時は直接実行
+        logger.warning("⚠️ GPUロックタイムアウト - 直接実行")
+        return await _execute_voice_synthesis_with_ref(ref_text, target_text, temperature, ref_audio, background_tasks)
+
+
+async def _execute_voice_synthesis_with_ref(ref_text: str, target_text: str, temperature: float, ref_audio: UploadFile, background_tasks: BackgroundTasks):
+    """GPU処理を実行する内部関数（参照音声アップロード対応）"""
+    try:
+        # 参照音声を一時ファイルに保存
+        temp_ref_path = f"/tmp/{uuid.uuid4()}_ref.wav"
+        with open(temp_ref_path, "wb") as f:
+            content = await ref_audio.read()
+            f.write(content)
+        
         result = await generate_voice_fast(
-            ref_audio_path="/app/input/reference_5sec.wav",
+            ref_audio_path=temp_ref_path,
             ref_text=ref_text,
             target_text=target_text,
             temperature=temperature
@@ -450,14 +646,16 @@ async def clone_voice_simple(
         
         # 送信後にファイル削除をバックグラウンドタスクに追加
         background_tasks.add_task(os.remove, temp_output_path)
+        background_tasks.add_task(os.remove, temp_ref_path)
         
         return FileResponse(
             temp_output_path,
             media_type="audio/wav",
             filename="generated_voice.wav"
         )
-        
+            
     except Exception as e:
+        logger.error(f"❌ 音声合成エラー: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
@@ -469,3 +667,16 @@ if __name__ == "__main__":
         reload=False,
         log_level="info"
     )
+@app.post("/clear-memory")
+async def clear_gpu_memory():
+    """GPU メモリを解放"""
+    try:
+        import gc
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+        gc.collect()
+        return {"status": "success", "message": "GPU memory cleared"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

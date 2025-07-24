@@ -70,10 +70,11 @@ RUN pip install onnx==1.15.0 \
     onnxoptimizer==0.3.13 \
     tensorrt==8.6.1.post1
 
-# FastAPI + 音声処理パッケージ
+# FastAPI + Gradio + 音声処理パッケージ
 RUN pip install fastapi==0.104.1 \
     uvicorn==0.24.0 \
-    python-multipart==0.0.6
+    python-multipart==0.0.6 \
+    gradio==3.50.2
 
 # Transformersライブラリの互換性修正
 RUN pip install transformers==4.35.2

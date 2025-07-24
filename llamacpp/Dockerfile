@@ -78,8 +78,8 @@ RUN mkdir -p /app/models /app/logs
 # 実行権限設定
 RUN chmod +x /app/scripts/*.py
 
-# ポート公開
-EXPOSE 8000
+# ポート公開（FastAPI: 8000, Gradio: 7860）
+EXPOSE 8000 7860
 
-# デフォルトコマンド（CLIモード）
-CMD ["python", "/app/scripts/chat_cli.py"]
+# デフォルトコマンド（Gradio WebUI）
+CMD ["python", "/app/src/gradio_app.py"]

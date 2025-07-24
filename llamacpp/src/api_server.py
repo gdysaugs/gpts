@@ -13,9 +13,11 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Union
 import logging
 import json
+import os
 from datetime import datetime
 
 from llm_engine import LLMEngine, GenerationConfig, create_engine
+# シンプルなasyncio.Lock使用
 
 # ===== API Models =====
 
@@ -44,6 +46,18 @@ class GenerationConfigRequest(BaseModel):
     max_tokens: Optional[int] = Field(None, ge=1, le=2048)
     repeat_penalty: Optional[float] = Field(None, ge=0.5, le=2.0)
 
+class GenerateRequest(BaseModel):
+    """SAAS統合用生成要求"""
+    user_input: str = Field(..., description="ユーザー入力テキスト")
+    max_tokens: int = Field(512, ge=1, le=2048, description="最大トークン数")
+    temperature: float = Field(0.7, ge=0.1, le=2.0, description="生成温度")
+    system_prompt: Optional[str] = Field(None, description="システムプロンプト（オプション）")
+
+class GenerateResponse(BaseModel):
+    """SAAS統合用生成応答"""
+    response: str = Field(..., description="生成されたテキスト")
+    inference_time: float = Field(..., description="推論時間(秒)")
+
 class HistoryResponse(BaseModel):
     """会話履歴応答"""
     messages: List[Dict] = Field(..., description="会話履歴")
@@ -64,6 +78,19 @@ class HealthResponse(BaseModel):
     model_loaded: bool = Field(..., description="モデル読み込み状態")
     gpu_available: bool = Field(..., description="GPU利用可能性")
     uptime: str = Field(..., description="稼働時間")
+
+class GenerateRequest(BaseModel):
+    """SAAS統合用生成要求"""
+    user_input: str = Field(..., description="ユーザー入力")
+    system_prompt: Optional[str] = Field(None, description="システムプロンプト")
+    max_tokens: Optional[int] = Field(512, description="最大トークン数")
+    temperature: Optional[float] = Field(0.7, description="温度パラメータ")
+
+class GenerateResponse(BaseModel):
+    """SAAS統合用生成応答"""
+    response: str = Field(..., description="生成されたテキスト")
+    inference_time: float = Field(..., description="推論時間(秒)")
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
 
 # ===== FastAPI App =====
 
@@ -88,16 +115,24 @@ app.add_middleware(
 llm_engine: Optional[LLMEngine] = None
 server_start_time = datetime.now()
 
+# シンプルなGPU排他制御
+gpu_lock: Optional[asyncio.Lock] = None
+
 # ===== Startup & Shutdown =====
 
 @app.on_event("startup")
 async def startup_event():
     """サーバー起動時の初期化"""
-    global llm_engine
+    global llm_engine, gpu_lock
     try:
         logging.info("Initializing LLM Engine...")
         llm_engine = create_engine()
         logging.info("LLM Engine initialized successfully!")
+        
+        # シンプルなasyncio.Lock初期化
+        gpu_lock = asyncio.Lock()
+        logging.info("AsyncIO GPU Lock initialized successfully!")
+        
     except Exception as e:
         logging.error(f"Failed to initialize LLM Engine: {e}")
         raise
@@ -305,10 +340,71 @@ async def set_technical_preset():
     llm_engine.set_system_prompt(technical_prompt)
     return {"message": "Technical preset activated!", "preset": "technical"}
 
+# ===== SAAS Integration =====
+
+@app.post("/generate", response_model=GenerateResponse)
+async def generate_with_gpu_lock(request: GenerateRequest):
+    """GPU排他制御付きテキスト生成（SAAS統合用）"""
+    check_engine()
+    
+    # シンプルなasyncio.LockでGPU排他制御
+    async with gpu_lock:
+        return await _execute_generation(request)
+
+async def _execute_generation(request: GenerateRequest):
+    """GPU処理を実行する内部関数"""
+    try:
+        import time
+        start_time = time.time()
+        
+        # システムプロンプト設定（指定されている場合）
+        original_prompt = None
+        if request.system_prompt:
+            original_prompt = llm_engine.config.system_prompt
+            llm_engine.set_system_prompt(request.system_prompt)
+        
+        # 生成設定
+        generation_config = GenerationConfig(
+            max_tokens=request.max_tokens,
+            temperature=request.temperature,
+            top_p=0.9,
+            top_k=40,
+            repeat_penalty=1.1
+        )
+        
+        # テキスト生成実行
+        response_text = llm_engine.generate_response(
+            user_input=request.user_input,
+            generation_config=generation_config,
+            use_history=False  # SAAS統合では履歴なし
+        )
+        
+        inference_time = time.time() - start_time
+        
+        # システムプロンプトを元に戻す（指定されていた場合）
+        if original_prompt:
+            llm_engine.set_system_prompt(original_prompt)
+        
+        return GenerateResponse(
+            response=response_text,
+            inference_time=inference_time
+        )
+        
+    except Exception as e:
+        logging.error(f"Generate error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ===== Main =====
 
 def main():
     """メイン関数"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='LlamaCPP FastAPI Server')
+    parser.add_argument('--host', default='0.0.0.0', help='Host to bind to')
+    parser.add_argument('--port', type=int, default=8000, help='Port to bind to')
+    args = parser.parse_args()
+    
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -316,8 +412,8 @@ def main():
     
     uvicorn.run(
         "api_server:app",
-        host="0.0.0.0",
-        port=8000,
+        host=args.host,
+        port=args.port,
         reload=False,
         log_level="info"
     )

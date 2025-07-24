@@ -1,0 +1,14 @@
+# NVIDIA競合修正版Dockerfile
+FROM super-wav2lip:v1-gpu-tensorrt
+
+# 競合するNVIDIAライブラリファイルを削除（PyCUDAはホストCUDA使用）
+RUN rm -f /usr/lib/x86_64-linux-gnu/libnvidia-*.so* && \
+    rm -f /usr/lib/x86_64-linux-gnu/libcuda.so* && \
+    rm -f /usr/lib/x86_64-linux-gnu/libcudart.so* && \
+    echo "✅ NVIDIA競合ライブラリ削除完了（ホストCUDA依存）"
+
+# 確認コマンド
+RUN echo "🚀 TensorRT確認:" && \
+    python -c "import tensorrt as trt; print(f'TensorRT {trt.__version__} OK')" && \
+    echo "🚀 PyCUDA確認:" && \
+    python -c "import pycuda.driver as cuda; print('PyCUDA OK')"

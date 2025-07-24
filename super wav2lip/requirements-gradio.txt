@@ -1,0 +1,5 @@
+# Gradio Frontend Dependencies - Super Wav2Lip UI (Gradio 4.x with Real-time Progress Bar)
+gradio>=4.44.0,<5.0.0
+requests>=2.28.0
+Pillow>=9.0.0
+numpy>=1.21.0

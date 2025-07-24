@@ -1,0 +1,106 @@
+# Super Wav2Lip デフォルト設定
+
+# モデル設定
+models:
+  # PyTorchモデル (標準)
+  pytorch_model: "models/wav2lip.pth"
+  # ONNXモデル (最適化済み)
+  onnx_model: "models/onnx/wav2lip_384.onnx"
+  
+  # 顔強化モデル
+  enhancers:
+    gfpgan: "models/enhancers/GFPGANv1.4.pth"
+    gpen: "models/enhancers/GPEN-BFR-512.pth"
+    codeformer: "models/enhancers/codeformer.pth"
+
+# 処理設定
+processing:
+  # GPU使用設定
+  use_gpu: true
+  gpu_device: 0
+  
+  # バッチサイズ
+  batch_size: 16
+  
+  # 品質設定
+  quality:
+    # 解像度 (元動画サイズ維持の場合は null)
+    output_width: null
+    output_height: null
+    
+    # フレームレート (元動画と同じ場合は null)
+    fps: null
+    
+    # 圧縮品質 (1-31, 低いほど高品質)
+    crf: 18
+
+# 音声処理設定
+audio:
+  # サンプリングレート
+  sample_rate: 16000
+  
+  # ノイズ除去
+  denoise:
+    enabled: false
+    strength: 0.8
+  
+  # 音量正規化
+  normalize: true
+  max_volume: 0.95
+
+# 顔検出設定
+face_detection:
+  # 検出信頼度閾値
+  confidence_threshold: 0.5
+  
+  # 顔サイズ制限
+  min_face_size: 30
+  max_face_size: null
+  
+  # 頭部傾き許容範囲 (度)
+  max_tilt_angle: 60
+
+# 出力設定
+output:
+  # 出力フォーマット
+  format: "mp4"
+  
+  # 動画コーデック
+  video_codec: "libx264"
+  
+  # 音声コーデック  
+  audio_codec: "aac"
+  
+  # 一時ファイル保持
+  keep_temp_files: false
+
+# パフォーマンス設定
+performance:
+  # メモリ最適化
+  optimize_memory: true
+  
+  # 並列処理数
+  num_workers: 4
+  
+  # FP16使用 (NVIDIA GPU)
+  use_fp16: true
+
+# ログ設定
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(levelname)s - %(message)s"
+  
+  # ログファイル出力
+  log_to_file: true
+  log_file: "logs/super_wav2lip.log"
+
+# デバッグ設定
+debug:
+  # 中間結果保存
+  save_intermediate: false
+  
+  # 詳細ログ
+  verbose: false
+  
+  # プロファイリング
+  enable_profiling: false

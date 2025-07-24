@@ -1,0 +1,36 @@
+# Frontend Dockerfile - 統合Gradio UI
+FROM python:3.10-slim
+
+# システム依存関係
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# 作業ディレクトリ
+WORKDIR /app
+
+# Python依存関係
+RUN pip install --no-cache-dir \
+    gradio==3.50.0 \
+    requests==2.31.0 \
+    fastapi==0.104.1 \
+    uvicorn==0.24.0
+
+# アプリケーションファイル
+COPY integrated_frontend.py /app/
+COPY shared /shared
+
+# ディレクトリ作成
+RUN mkdir -p /shared/{input,output,temp} \
+    && mkdir -p /app/{input,output,temp}
+
+# ポート公開
+EXPOSE 7860
+
+# ヘルスチェック
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:7860 || exit 1
+
+# 実行
+CMD ["python", "integrated_frontend.py"]

@@ -1,0 +1,237 @@
+version: '3.8'
+
+services:
+  # Redis - 分散ロック・キャッシュ管理
+  redis:
+    image: redis:7-alpine
+    container_name: integrated-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./config/redis.conf:/etc/redis.conf:ro
+    command: >
+      sh -c "
+        echo 'maxmemory 512mb' > /tmp/redis.conf &&
+        echo 'maxmemory-policy allkeys-lru' >> /tmp/redis.conf &&
+        echo 'save 900 1' >> /tmp/redis.conf &&
+        echo 'save 300 10' >> /tmp/redis.conf &&
+        echo 'save 60 10000' >> /tmp/redis.conf &&
+        redis-server /tmp/redis.conf
+      "
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - integrated-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # SoVITS - 音声クローニングサービス
+  sovits:
+    build:
+      context: ../Gptsovits
+      dockerfile: Dockerfile
+    container_name: integrated-sovits
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # GPU サポート (WSL2)
+      - /usr/lib/wsl:/usr/lib/wsl:ro
+      # データボリューム
+      - ./shared:/shared
+      - ../Gptsovits/input:/app/input
+      - ../Gptsovits/output:/app/output
+      - ../Gptsovits/models:/app/models
+      - ../Gptsovits/scripts:/app/scripts
+      # 日本語特化モデル
+      - ../Gptsovits/models/v4/GPT-SoVITS/gpt-sovits-ja-h:/app/GPT_SoVITS/pretrained_models/gpt-sovits-ja-h
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - LD_LIBRARY_PATH=/usr/lib/wsl/lib:/usr/local/lib/python3.10/dist-packages/nvidia/curand/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cublas/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cudnn/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cufft/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cuda_runtime/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cuda_nvrtc/lib
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONPATH=/app:/app/GPT_SoVITS
+    command: >
+      bash -c "
+        pip install fastapi uvicorn python-multipart redis &&
+        cd /app/scripts &&
+        python fastapi_voice_server_redis.py --host 0.0.0.0 --port 8000 --redis-url redis://redis:6379/0
+      "
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - integrated-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # Wav2Lip - 口パク動画生成サービス
+  wav2lip:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: integrated-wav2lip
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    volumes:
+      # GPU サポート (WSL2)
+      - /usr/lib/wsl:/usr/lib/wsl:ro
+      # データボリューム
+      - ./shared:/shared
+      - ./input:/app/input
+      - ./output:/app/output
+      - ./models:/app/models
+      - ./src:/app/src
+      - ./temp:/app/temp
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - LD_LIBRARY_PATH=/usr/lib/wsl/lib:/usr/local/lib/python3.10/dist-packages/nvidia/curand/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cublas/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cudnn/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cufft/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cuda_runtime/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cuda_nvrtc/lib
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONPATH=/app/src
+    command: >
+      bash -c "
+        pip install redis &&
+        cd /app/src &&
+        python fastapi_wav2lip_redis.py --host 0.0.0.0 --port 8002 --redis-url redis://redis:6379/0
+      "
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    networks:
+      - integrated-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # Frontend - 統合Gradio UI
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.gradio
+    container_name: integrated-frontend
+    restart: unless-stopped
+    ports:
+      - "7860:7860"
+    volumes:
+      - ./shared:/shared
+      - ./input:/app/input
+      - ./output:/app/output
+      - ./temp:/app/temp
+      - ./gradio_wav2lip_ui.py:/app/gradio_wav2lip_ui.py
+    environment:
+      - SOVITS_API=http://sovits:8000
+      - WAV2LIP_API=http://wav2lip:8002
+      - REDIS_URL=redis://redis:6379/0
+      - FASTAPI_URL=http://wav2lip:8002
+    command: >
+      bash -c "
+        pip install gradio requests &&
+        python gradio_wav2lip_ui.py
+      "
+    depends_on:
+      sovits:
+        condition: service_healthy
+      wav2lip:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - integrated-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+# ネットワーク設定
+networks:
+  integrated-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# ボリューム設定  
+volumes:
+  redis_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /home/adama/gpts/super wav2lip/data/redis
+
+# 統合システム起動手順
+# 
+# 1. 初期セットアップ:
+#    mkdir -p ./shared/{input,output,temp}
+#    mkdir -p ./data/redis
+#    mkdir -p ./config
+#
+# 2. モデルファイル配置:
+#    - GPT-SoVITS 日本語特化モデル: ../Gptsovits/models/v4/GPT-SoVITS/gpt-sovits-ja-h/hscene-e17.ckpt
+#    - Wav2Lip モデル: ./models/onnx/wav2lip_gan.onnx
+#    - 顔検出モデル: ./src/utils/scrfd_2.5g_bnkps.onnx
+#
+# 3. システム起動:
+#    docker-compose -f docker-compose-integrated.yml up -d
+#
+# 4. ログ監視:
+#    docker-compose -f docker-compose-integrated.yml logs -f
+#
+# 5. アクセス:
+#    Frontend UI: http://localhost:7860
+#    SoVITS API: http://localhost:8000/docs
+#    Wav2Lip API: http://localhost:8002/docs
+#    Redis: localhost:6379
+#
+# 6. システム停止:
+#    docker-compose -f docker-compose-integrated.yml down
+#
+# 7. 完全削除:
+#    docker-compose -f docker-compose-integrated.yml down -v --rmi all

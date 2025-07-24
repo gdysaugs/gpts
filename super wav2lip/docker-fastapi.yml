@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  super-wav2lip-api:
+    image: super-wav2lip:v1-gpu-ultimate
+    container_name: super-wav2lip-fastapi
+    ports:
+      - "8002:8002"
+    volumes:
+      - /usr/lib/wsl:/usr/lib/wsl
+      - ./input:/app/input
+      - ./output:/app/output
+      - ./models:/app/models
+      - ./src:/app/src
+      - ./temp:/app/temp
+    environment:
+      - LD_LIBRARY_PATH=/usr/lib/wsl/lib:/usr/local/lib/python3.10/dist-packages/nvidia/curand/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cublas/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cudnn/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cufft/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cuda_runtime/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cuda_nvrtc/lib
+      - PYTHONPATH=/app/src
+    working_dir: /app/src
+    command: >
+      bash -c "
+      pip install fastapi uvicorn python-multipart &&
+      python fastapi_wav2lip_server.py
+      "
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    privileged: true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

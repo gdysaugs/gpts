@@ -1,0 +1,118 @@
+# Redis統合版 - 高速並列処理対応
+version: '3.8'
+
+services:
+  # Redis Lock Manager
+  redis:
+    image: redis:7-alpine
+    container_name: super-wav2lip-redis
+    restart: unless-stopped
+    
+    ports:
+      - "6379:6379"
+    
+    volumes:
+      - ./config/redis.conf:/usr/local/etc/redis/redis.conf
+      - ./data/redis:/data
+    
+    command: redis-server /usr/local/etc/redis/redis.conf
+    
+    networks:
+      - wav2lip-network
+    
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # FastAPI Backend - Redis Lock版
+  super-wav2lip-backend:
+    image: super-wav2lip:v1-gpu-ultimate
+    container_name: super-wav2lip-redis-optimized
+    restart: unless-stopped
+    
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    
+    privileged: true
+    
+    environment:
+      - LD_LIBRARY_PATH=/usr/lib/wsl/lib:/usr/local/lib/python3.10/dist-packages/nvidia/curand/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cublas/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cudnn/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cufft/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cuda_runtime/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cuda_nvrtc/lib
+      - PYTHONPATH=/app/src
+      - PYTHONUNBUFFERED=1
+      - REDIS_URL=redis://redis:6379/0
+    
+    volumes:
+      - /usr/lib/wsl:/usr/lib/wsl
+      - ./input:/app/input
+      - ./output:/app/output
+      - ./models:/app/models
+      - ./src:/app/src
+      - ./temp:/app/temp
+    
+    working_dir: /app/src
+    
+    ports:
+      - "8002:8002"
+    
+    networks:
+      - wav2lip-network
+    
+    depends_on:
+      redis:
+        condition: service_healthy
+    
+    command: >
+      bash -c "
+      pip install fastapi uvicorn python-multipart redis &&
+      python fastapi_wav2lip_redis.py
+      "
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    mem_limit: 8g
+    memswap_limit: 8g
+    shm_size: 2g
+
+  # Gradio Frontend
+  gradio-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.gradio
+    container_name: super-wav2lip-ui
+    restart: unless-stopped
+    
+    environment:
+      - FASTAPI_URL=http://super-wav2lip-backend:8002
+      - PYTHONUNBUFFERED=1
+    
+    ports:
+      - "7860:7860"
+    
+    networks:
+      - wav2lip-network
+    
+    depends_on:
+      super-wav2lip-backend:
+        condition: service_healthy
+
+networks:
+  wav2lip-network:
+    driver: bridge
+
+volumes:
+  wav2lip-models:
+  wav2lip-output:
+  wav2lip-temp:
+  redis-data:

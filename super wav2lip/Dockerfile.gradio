@@ -1,0 +1,38 @@
+# Gradio Frontend Dockerfile - 統合口パクシステム UI
+FROM python:3.10-slim
+
+# システム依存関係
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# 作業ディレクトリ
+WORKDIR /app
+
+# Python依存関係
+RUN pip install --no-cache-dir \
+    gradio==4.0.0 \
+    requests==2.31.0 \
+    fastapi==0.104.1 \
+    uvicorn==0.24.0
+
+# UIファイルをコピー
+COPY gradio_wav2lip_ui.py /app/
+
+# ディレクトリ作成
+RUN mkdir -p /shared/{input,output,temp} \
+    && mkdir -p /app/{input,output,temp} \
+    && chmod -R 755 /app \
+    && chmod -R 755 /shared
+
+# ポート公開
+EXPOSE 7860
+
+# ヘルスチェック
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:7860 || exit 1
+
+# デフォルトコマンド（Docker Composeで上書きされる）
+CMD ["python", "gradio_wav2lip_ui.py"]
