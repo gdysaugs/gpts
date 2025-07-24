@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  sadtalker-custom:
+    build: .
+    container_name: sadtalker-custom-api
+    ports:
+      - "10364:10364"
+    volumes:
+      - ./checkpoints:/home/SadTalker/checkpoints
+      - ./gfpgan/weights:/home/SadTalker/gfpgan/weights
+      - ./results:/home/SadTalker/results
+      - ./input:/home/SadTalker/input
+      - /tmp:/tmp
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - NVIDIA_VISIBLE_DEVICES=all
+    runtime: nvidia
+    command: python custom_api.py
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10364/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  tts:
+    image: paidax/tts_modelscope:0.1.3
+    container_name: tts-service
+    ports:
+      - "9566:9566"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9566/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  default:
+    driver: bridge

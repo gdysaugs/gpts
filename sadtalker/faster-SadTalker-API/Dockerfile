@@ -24,5 +24,10 @@ RUN pip install httpcore==0.15
 
 WORKDIR /home/SadTalker
 
-COPY main.py sadtalker_default.jpeg ./
+COPY main.py sadtalker_default.jpeg download_models.py ./
 COPY src/ src/
+
+# Install model download dependencies and download models during build
+RUN pip install requests tqdm && \
+    python download_models.py && \
+    rm download_models.py

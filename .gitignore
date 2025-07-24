@@ -80,3 +80,12 @@ wav2lips/gfpgan/weights/*
 # Keep specific small files
 !input/*.mp4
 !output/result_*.mp4
+
+# Exclude embedded git repositories
+wav2lips/YOLOv8-TensorRT/
+
+# Large zip files (>50MB)
+super wav2lip/wav2lip_face_occluder.zip
+super wav2lip/wav2lip_seg_mask.zip
+super wav2lip/wav2lip_onnx_models.zip
+super wav2lip/wav2lip_insightface_func.zip
