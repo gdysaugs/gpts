@@ -1,0 +1,58 @@
+# Super Wav2Lip - Fixed Version with Permanent Solutions
+# All GUI and model path issues permanently resolved
+
+FROM super-wav2lip:v1-gpu-ultimate
+
+# 永続化された修正を適用
+WORKDIR /app
+
+# 1. 修正されたinference_onnxModel.pyをコピー
+COPY inference_onnxModel_fixed.py /app/original_source/inference_onnxModel.py
+
+# 1.5. 必要なソースファイルもコピー（事前ロード対応版）
+COPY src/ /app/src/
+
+# 1.6. 事前ロード用の追加依存関係をインストール
+RUN pip install --no-cache-dir scipy librosa
+
+# 2. 必要なディレクトリを事前作成（Gradio一時ディレクトリも含む）
+RUN mkdir -p /app/original_source/temp \
+    && mkdir -p /app/original_source/faceID \
+    && mkdir -p /app/original_source/checkpoints \
+    && mkdir -p /app/original_source/enhancers/GFPGAN \
+    && mkdir -p /app/original_source/enhancers/GPEN \
+    && mkdir -p /app/original_source/enhancers/Codeformer \
+    && mkdir -p /tmp/gradio \
+    && chmod 777 /tmp/gradio
+
+# 3. モデルファイルを正しい場所にコピー（起動時に毎回実行される問題を解決）
+# 必要なモデルファイルをホストからコピー
+COPY wav2lip_gan.onnx /app/original_source/checkpoints/wav2lip_gan.onnx
+COPY models/onnx/recognition.onnx /app/original_source/faceID/recognition.onnx
+COPY models/enhancers/GFPGAN/GFPGANv1.4.onnx /app/original_source/enhancers/GFPGAN/GFPGANv1.4.onnx
+
+# 4. 権限設定
+RUN chmod 755 /app/original_source/inference_onnxModel.py \
+    && chmod 644 /app/original_source/checkpoints/wav2lip_gan.onnx \
+    && chmod 644 /app/original_source/faceID/recognition.onnx \
+    && chmod 644 /app/original_source/enhancers/GFPGAN/GFPGANv1.4.onnx
+
+# 5. 永続化確認用のマーカーファイル作成
+RUN echo "GUI and model fixes applied at $(date)" > /app/FIXES_APPLIED.txt \
+    && echo "- selectROI disabled (headless operation)" >> /app/FIXES_APPLIED.txt \
+    && echo "- cv2.imshow/waitKey disabled" >> /app/FIXES_APPLIED.txt \
+    && echo "- ffmpeg.exe -> ffmpeg fixed" >> /app/FIXES_APPLIED.txt \
+    && echo "- cls commands disabled" >> /app/FIXES_APPLIED.txt \
+    && echo "- Model paths permanently fixed" >> /app/FIXES_APPLIED.txt \
+    && echo "- wav2lip_gan.onnx permanently installed" >> /app/FIXES_APPLIED.txt \
+    && echo "- recognition.onnx permanently installed" >> /app/FIXES_APPLIED.txt \
+    && echo "- GFPGANv1.4.onnx permanently installed" >> /app/FIXES_APPLIED.txt \
+    && echo "- /tmp/gradio directory permanently created" >> /app/FIXES_APPLIED.txt \
+    && echo "- Model pre-loading system implemented" >> /app/FIXES_APPLIED.txt
+
+LABEL description="Super Wav2Lip with permanent fixes for GUI and model issues"
+LABEL version="v1-gpu-ultimate-fixed"
+
+# ヘルスチェック用エンドポイントで修正状況を確認できるようにする
+RUN echo '#!/bin/bash\necho "=== Super Wav2Lip Fixed Version Status ==="\ncat /app/FIXES_APPLIED.txt\necho ""\necho "=== Critical Files Check ==="\nls -la /app/original_source/faceID/recognition.onnx 2>/dev/null && echo "✅ recognition.onnx permanently installed" || echo "❌ recognition.onnx missing"\nls -la /app/original_source/enhancers/GFPGAN/GFPGANv1.4.onnx 2>/dev/null && echo "✅ GFPGANv1.4.onnx permanently installed" || echo "❌ GFPGANv1.4.onnx missing"\nls -la /app/original_source/checkpoints/wav2lip_gan.onnx 2>/dev/null && echo "✅ wav2lip_gan.onnx permanently installed" || echo "❌ wav2lip_gan.onnx missing"\nls -la /app/original_source/temp 2>/dev/null && echo "✅ temp directory exists" || echo "❌ temp directory missing"\nls -la /tmp/gradio 2>/dev/null && echo "✅ /tmp/gradio permanently created" || echo "❌ /tmp/gradio missing"\nls -la /app/src/fastapi_wav2lip_server.py 2>/dev/null && echo "✅ Preload-enabled FastAPI server installed" || echo "❌ FastAPI server missing"' > /app/check_fixes.sh \
+    && chmod +x /app/check_fixes.sh

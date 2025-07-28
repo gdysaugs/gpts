@@ -1,0 +1,153 @@
+# Super Wav2Lip Complete System - Frontend + Backend (OPTIMIZED)
+# 最適化版: 事前ロード型FastAPIで初回遅延を解消
+
+version: '3.8'
+
+services:
+  # GPT-SoVITS Voice Cloning API
+  gpt-sovits-api:
+    image: gpt-sovits:v4
+    container_name: gpt-sovits-api
+    restart: unless-stopped
+    runtime: runc
+    
+    privileged: true
+    
+    environment:
+      - LD_LIBRARY_PATH=/usr/lib/wsl/lib
+      - PYTHONUNBUFFERED=1
+    
+    volumes:
+      - /usr/lib/wsl:/usr/lib/wsl
+      - /home/adama/project/gpts/Gptsovits/input:/app/input
+      - /home/adama/project/gpts/Gptsovits/output:/app/output
+      - /home/adama/project/gpts/Gptsovits/scripts:/app/scripts
+      - /home/adama/project/gpts/Gptsovits/models/v4/GPT-SoVITS/gpt-sovits-ja-h:/app/GPT_SoVITS/pretrained_models/gpt-sovits-ja-h
+    
+    ports:
+      - "8000:8000"
+    
+    networks:
+      - wav2lip-network
+    
+    command: >
+      bash -c "
+      pip install fastapi uvicorn python-multipart &&
+      python /app/scripts/fastapi_voice_server.py
+      "
+    
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/').raise_for_status()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # FastAPI Backend - Super Wav2Lip Processing Engine (OPTIMIZED)
+  super-wav2lip-optimized:
+    image: super-wav2lip:v1-gpu-ultimate
+    container_name: super-wav2lip-optimized
+    restart: unless-stopped
+    runtime: runc
+    
+    privileged: true
+    
+    environment:
+      - LD_LIBRARY_PATH=/usr/lib/wsl/lib:/usr/local/lib/python3.10/dist-packages/nvidia/curand/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cublas/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cudnn/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cufft/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cuda_runtime/lib:/usr/local/lib/python3.10/dist-packages/nvidia/cuda_nvrtc/lib
+      - PYTHONPATH=/app/src
+      - PYTHONUNBUFFERED=1
+      - QT_QPA_PLATFORM=offscreen
+      - OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS=0
+      - MPLBACKEND=Agg
+    
+    volumes:
+      - /usr/lib/wsl:/usr/lib/wsl
+      - ./input:/app/input
+      - ./output:/app/output
+      - ./models:/app/models
+      - ./src:/app/src
+      - ./temp:/app/temp
+      - ./gradio_wav2lip_ui.py:/app/gradio_wav2lip_ui.py
+      - ./manifest.json:/app/manifest.json
+      - ./wav2lip_gan.onnx:/app/original_source/checkpoints/wav2lip_gan.onnx
+      - ./wav2lip.onnx:/app/original_source/checkpoints/wav2lip.onnx
+    
+    working_dir: /app/src
+    
+    ports:
+      - "8002:8002"
+    
+    networks:
+      - wav2lip-network
+    
+    command: >
+      bash -c "
+      pip install fastapi uvicorn python-multipart &&
+      echo '🚀 Starting OPTIMIZED Wav2Lip Server with Model Preloading...' &&
+      python /app/src/fastapi_wav2lip_server_optimized.py
+      "
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 120s  # 最適化版は初期化に少し時間がかかる
+    
+    # リソース制限
+    mem_limit: 8g
+    memswap_limit: 8g
+    shm_size: 2g
+
+  # Gradio Frontend - Web UI
+  gradio-frontend:
+    image: super-wav2lip:v1-gpu-ultimate
+    container_name: super-wav2lip-ui
+    restart: unless-stopped
+    
+    environment:
+      - FASTAPI_URL=http://super-wav2lip-optimized:8002
+      - SOVITS_API=http://gpt-sovits-api:8000
+      - WAV2LIP_API=http://super-wav2lip-optimized:8002
+      - PYTHONUNBUFFERED=1
+    
+    volumes:
+      - ./gradio_wav2lip_ui.py:/app/gradio_wav2lip_ui.py
+      - ./manifest.json:/app/manifest.json
+      - ./temp:/app/temp
+      - ./input:/app/input
+      - ./output:/app/output
+    
+    ports:
+      - "7860:7860"
+    
+    networks:
+      - wav2lip-network
+    
+    depends_on:
+      gpt-sovits-api:
+        condition: service_healthy
+      super-wav2lip-optimized:
+        condition: service_healthy
+    
+    command: >
+      bash -c "
+      pip install gradio requests opencv-python Pillow numpy &&
+      python /app/gradio_wav2lip_ui.py
+      "
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+networks:
+  wav2lip-network:
+    driver: bridge
+
+volumes:
+  wav2lip-models:
+  wav2lip-output:
+  wav2lip-temp:

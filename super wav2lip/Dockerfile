@@ -1,7 +1,7 @@
 # Super Wav2Lip Dockerfile  
 # wav2lip-onnx-HQベース + 既存wav2lipsプロジェクトのノウハウ適用
 
-FROM ubuntu:22.04
+FROM nvidia/cuda:12.1.0-devel-ubuntu22.04
 
 # 環境変数設定
 ENV DEBIAN_FRONTEND=noninteractive
@@ -81,7 +81,10 @@ RUN pip3 install --no-cache-dir \
     # YOLO関連
     ultralytics>=8.3.0
 
-# TensorRT高速化ライブラリ（ホスト競合回避、pip版のみ）
+# TensorRT高速化ライブラリ（CUDA開発環境が整った後にインストール）
+# pycudaのビルドに必要な環境変数を設定
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH=$CUDA_HOME/bin:$PATH
 RUN pip3 install --no-cache-dir \
     tensorrt \
     pycuda \
@@ -93,15 +96,15 @@ RUN pip3 install --no-cache-dir dlib>=19.24.0 || echo "dlib installation failed,
 # wav2lip-onnx-HQソースをダウンロード
 RUN git clone https://github.com/instant-high/wav2lip-onnx-HQ.git /app/original_source
 
-# アプリケーションソースをコピー  
-COPY src/ /app/src/
-COPY config/ /app/config/
+# アプリケーションソースをコピー（存在する場合のみ）
+# COPY src/ /app/src/ 
+# COPY config/ /app/config/
 
 # 必要なディレクトリ作成
-RUN mkdir -p /app/input /app/output /app/models /app/temp /app/logs /app/checkpoints
+RUN mkdir -p /app/input /app/output /app/models /app/temp /app/logs /app/checkpoints /app/src
 
-# 実行権限設定
-RUN chmod +x /app/src/*.py
+# 実行権限設定（ファイルが存在する場合のみ）
+RUN find /app/src -name "*.py" -type f -exec chmod +x {} \; || true
 
 # CUDA ライブラリパス設定
 ENV CUDA_LIB_PATH="/usr/local/lib/python3.10/dist-packages/nvidia"

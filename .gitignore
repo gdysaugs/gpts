@@ -89,3 +89,15 @@ super wav2lip/wav2lip_face_occluder.zip
 super wav2lip/wav2lip_seg_mask.zip
 super wav2lip/wav2lip_onnx_models.zip
 super wav2lip/wav2lip_insightface_func.zip
+
+# Additional large files found during migration
+*.pack
+FACEFUSION/models/*.onnx
+sadtalker/gfpgan/weights/*.pth
+sadtalker/checkpoints/*.pth
+sadtalker/checkpoints/*.tar
+sadtalker/checkpoints/*.safetensors
+Gptsovits/models/v4/GPT-SoVITS/gpt-sovits-ja-h/*.ckpt
+wav2lip/*.zip
+super wav2lip/*.zip
+super wav2lip_backup_gradio3.50/*.zip

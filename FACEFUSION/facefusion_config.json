@@ -1,0 +1,20 @@
+{
+    "face_detector_model": "yolo_face",
+    "face_detector_size": "640x640",
+    "face_detector_score": 0.5,
+    "face_landmarker_model": "2dfan4",
+    "face_landmarker_score": 0.5,
+    "face_selector_mode": "many",
+    "face_selector_order": "left-right",
+    "face_mask_types": ["box"],
+    "face_mask_blur": 0.3,
+    "face_mask_padding": [0, 0, 0, 0],
+    "output_image_quality": 90,
+    "processors": ["face_swapper"],
+    "face_swapper_model": "hyperswap_1a_256",
+    "execution_providers": ["cuda"],
+    "execution_thread_count": 4,
+    "execution_queue_count": 1,
+    "video_memory_strategy": "moderate",
+    "skip_nsfw": true
+}

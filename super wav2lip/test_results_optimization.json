@@ -1,0 +1,48 @@
+{
+  "timestamp": "2025-07-26 14:06:47",
+  "tests": {
+    "gpt-sovits_health": {
+      "healthy": true,
+      "response_time": 0.019977807998657227
+    },
+    "wav2lip_(optimized)_health": {
+      "healthy": true,
+      "response_time": 0.008514165878295898
+    },
+    "gradio_ui_health": {
+      "healthy": true,
+      "response_time": 0.018306970596313477
+    },
+    "model_preloading": {
+      "models_loaded": true,
+      "preloaded_models": [
+        "detector",
+        "wav2lip",
+        "audio_processor"
+      ],
+      "device": "cuda",
+      "available_enhancers": [
+        "none",
+        "gfpgan",
+        "gpen",
+        "codeformer"
+      ]
+    },
+    "warmup": {
+      "success": true,
+      "time": 0.14518213272094727
+    },
+    "response_stability": {
+      "times": [
+        0.002429485321044922,
+        0.013242006301879883,
+        0.011857748031616211,
+        0.0156707763671875,
+        0.011053800582885742
+      ],
+      "average": 0.010850763320922852,
+      "min": 0.002429485321044922,
+      "max": 0.0156707763671875
+    }
+  }
+}
